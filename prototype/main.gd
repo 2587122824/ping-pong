@@ -2,6 +2,7 @@ extends Node3D
 
 const PLAYER_SPEED := 5.0
 const INTERACTION_DISTANCE := 3.2
+const BATTLE_CARD_TYPE_LIMIT := 1
 
 var player: CharacterBody3D
 var camera: Camera3D
@@ -46,7 +47,6 @@ var dialogue_index := 0
 var dialogue_lines: Array[String] = []
 var battle_player_hp := 30
 var battle_opponent_hp := 30
-var battle_energy := 3
 var battle_block := 0
 var battle_turn := 1
 var battle_weakens_opponent := false
@@ -55,14 +55,15 @@ var battle_won := false
 var battle_hand: Array[Dictionary] = []
 var battle_deck: Array[String] = []
 var battle_discard: Array[String] = []
+var battle_type_uses: Dictionary = {}
 var battle_feedback_text := ""
 var player_deck: Array[String] = ["forehand", "backhand", "guard", "curve", "forehand", "backhand", "guard", "curve", "forehand", "backhand"]
 
 var battle_card_definitions := {
-	"forehand": {"name": "正手击打", "cost": 1, "type": "damage", "value": 6, "description": "造成 6 点伤害"},
-	"backhand": {"name": "反手快攻", "cost": 1, "type": "damage", "value": 4, "description": "造成 4 点伤害，消耗低"},
-	"guard": {"name": "架拍格挡", "cost": 1, "type": "block", "value": 7, "description": "抵挡本回合 7 点伤害"},
-	"curve": {"name": "旋球扰乱", "cost": 2, "type": "disrupt", "value": 3, "description": "造成 3 点伤害，并削弱对手本回合攻击"}
+	"forehand": {"name": "正手击打", "type": "damage", "value": 6, "description": "造成 6 点伤害"},
+	"backhand": {"name": "反手快攻", "type": "damage", "value": 4, "description": "造成 4 点伤害"},
+	"guard": {"name": "架拍格挡", "type": "block", "value": 7, "description": "抵挡本回合 7 点伤害"},
+	"curve": {"name": "旋球扰乱", "type": "disrupt", "value": 3, "description": "造成 3 点伤害，并削弱对手本回合攻击"}
 }
 var money := 120
 var inventory := {
@@ -554,15 +555,8 @@ func _clear_collection_rows(rows: VBoxContainer) -> void:
 
 func _make_collection_card_row(card_id: String, trailing_text: String) -> Panel:
 	var card: Dictionary = battle_card_definitions[card_id]
-	var category := "攻击"
-	var accent := Color("#f87171")
-	match card["type"]:
-		"block":
-			category = "防御"
-			accent = Color("#5eead4")
-		"disrupt":
-			category = "干扰"
-			accent = Color("#c4b5fd")
+	var category := _card_category(String(card["type"]))
+	var accent := _card_accent(String(card["type"]))
 	var row := Panel.new()
 	row.custom_minimum_size = Vector2(640, 72)
 	var style := StyleBoxFlat.new()
@@ -581,7 +575,7 @@ func _make_collection_card_row(card_id: String, trailing_text: String) -> Panel:
 	var name_label := Label.new()
 	name_label.position = Vector2(98, 8)
 	name_label.size = Vector2(270, 26)
-	name_label.text = "%s  ·  %d 能量" % [card["name"], card["cost"]]
+	name_label.text = "%s  ·  每回合限 %d 张" % [card["name"], BATTLE_CARD_TYPE_LIMIT]
 	name_label.add_theme_font_size_override("font_size", 17)
 	name_label.add_theme_color_override("font_color", Color("#f1f5f9"))
 	row.add_child(name_label)
@@ -968,7 +962,6 @@ func _start_battle(npc: Node3D) -> void:
 	battle_opponent = npc
 	battle_player_hp = 30
 	battle_opponent_hp = 30
-	battle_energy = 3
 	battle_block = 0
 	battle_turn = 1
 	battle_weakens_opponent = false
@@ -977,6 +970,7 @@ func _start_battle(npc: Node3D) -> void:
 	battle_feedback_text = "牌战开始。先读出对手意图，再决定出牌或结束回合。"
 	battle_deck = player_deck.duplicate()
 	battle_discard.clear()
+	battle_type_uses.clear()
 	battle_hand.clear()
 	_draw_battle_cards_to_five()
 	battle_panel.visible = true
@@ -1000,12 +994,14 @@ func _play_battle_card(index: int) -> void:
 		return
 	var card_id: String = battle_hand[index]["id"]
 	var card: Dictionary = battle_card_definitions[card_id]
-	if battle_energy < card["cost"]:
-		battle_feedback_text = "能量不足，无法使用「%s」。" % card["name"]
+	var card_type := String(card["type"])
+	var used_count: int = battle_type_uses.get(card_type, 0)
+	if used_count >= BATTLE_CARD_TYPE_LIMIT:
+		battle_feedback_text = "本回合的%s牌已使用，%s牌每回合最多使用 %d 张。" % [_card_category(card_type), _card_category(card_type), BATTLE_CARD_TYPE_LIMIT]
 		_refresh_battle_ui()
 		return
-	battle_energy -= card["cost"]
-	match card["type"]:
+	battle_type_uses[card_type] = used_count + 1
+	match card_type:
 		"damage":
 			battle_opponent_hp = max(0, battle_opponent_hp - card["value"])
 			battle_feedback_text = "你使用「%s」，造成 %d 点伤害。" % [card["name"], card["value"]]
@@ -1016,6 +1012,8 @@ func _play_battle_card(index: int) -> void:
 			battle_opponent_hp = max(0, battle_opponent_hp - card["value"])
 			battle_weakens_opponent = true
 			battle_feedback_text = "你使用「%s」，造成 %d 点伤害并削弱本回合攻击。" % [card["name"], card["value"]]
+		_:
+			battle_feedback_text = "你使用「%s」。" % card["name"]
 	battle_discard.append(card_id)
 	battle_hand.remove_at(index)
 	if battle_opponent_hp <= 0:
@@ -1047,9 +1045,9 @@ func _end_battle_turn() -> void:
 		battle_feedback_text = "你输掉了牌战。调整出牌节奏后再来挑战。"
 	else:
 		battle_turn += 1
-		battle_energy = 3
 		battle_block = 0
 		battle_weakens_opponent = false
+		battle_type_uses.clear()
 		_draw_battle_cards_to_five()
 	_refresh_battle_ui()
 
@@ -1062,6 +1060,7 @@ func _close_battle() -> void:
 	battle_hand.clear()
 	battle_deck.clear()
 	battle_discard.clear()
+	battle_type_uses.clear()
 
 func _refresh_battle_ui() -> void:
 	if battle_panel == null or not battle_panel.visible:
@@ -1071,7 +1070,7 @@ func _refresh_battle_ui() -> void:
 	battle_opponent_hp_text.text = "%d / 30" % battle_opponent_hp
 	battle_player_hp_bar.value = battle_player_hp
 	battle_opponent_hp_bar.value = battle_opponent_hp
-	battle_status.text = "能量  %d / 3     格挡  %d" % [battle_energy, battle_block]
+	battle_status.text = "本回合牌类额度  %s     格挡  %d" % [_battle_type_limit_summary(), battle_block]
 	battle_deck_label.text = "你的手牌     %d / 5 张  ·  牌库 %d  ·  弃牌 %d" % [battle_hand.size(), battle_deck.size(), battle_discard.size()]
 	if battle_finished:
 		battle_intent.text = "牌战结束 · %s" % ("胜利" if battle_won else "失败")
@@ -1085,26 +1084,54 @@ func _refresh_battle_ui() -> void:
 		if index < battle_hand.size():
 			var card_id: String = battle_hand[index]["id"]
 			var card: Dictionary = battle_card_definitions[card_id]
-			var category := "攻击"
-			var accent := Color("#f87171")
-			match card["type"]:
-				"block":
-					category = "防御"
-					accent = Color("#5eead4")
-				"disrupt":
-					category = "干扰"
-					accent = Color("#c4b5fd")
-			button.text = "%s     %d 能量\n\n%s\n%s" % [category, card["cost"], card["name"], card["description"]]
+			var card_type := String(card["type"])
+			var category := _card_category(card_type)
+			var accent := _card_accent(card_type)
+			var used_count: int = battle_type_uses.get(card_type, 0)
+			button.text = "%s     本回合 %d/%d\n\n%s\n%s" % [category, used_count, BATTLE_CARD_TYPE_LIMIT, card["name"], card["description"]]
 			button.add_theme_color_override("font_color", Color("#dbe7f5"))
 			button.add_theme_color_override("font_hover_color", Color.WHITE)
 			button.add_theme_color_override("font_disabled_color", Color("#67748a"))
 			button.add_theme_stylebox_override("normal", _battle_card_style(Color("#202c42"), Color(accent, 0.75)))
 			button.add_theme_stylebox_override("hover", _battle_card_style(Color("#2a3a56"), accent))
 			button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#151f32"), accent))
-			button.disabled = battle_finished or battle_energy < card["cost"]
+			button.disabled = battle_finished or used_count >= BATTLE_CARD_TYPE_LIMIT
 		else:
 			button.text = "待抽取"
 			button.disabled = true
+
+func _battle_type_limit_summary() -> String:
+	var type_order: Array[String] = []
+	for card_id in battle_card_definitions:
+		var card_type := String(battle_card_definitions[card_id]["type"])
+		if not type_order.has(card_type):
+			type_order.append(card_type)
+	var summary: Array[String] = []
+	for card_type in type_order:
+		summary.append("%s %d/%d" % [_card_category(card_type), battle_type_uses.get(card_type, 0), BATTLE_CARD_TYPE_LIMIT])
+	return "  ·  ".join(summary)
+
+func _card_category(card_type: String) -> String:
+	match card_type:
+		"damage":
+			return "攻击"
+		"block":
+			return "防御"
+		"disrupt":
+			return "干扰"
+		_:
+			return card_type
+
+func _card_accent(card_type: String) -> Color:
+	match card_type:
+		"damage":
+			return Color("#f87171")
+		"block":
+			return Color("#5eead4")
+		"disrupt":
+			return Color("#c4b5fd")
+		_:
+			return Color("#fbbf24")
 
 func _material(color: Color, emissive := false) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
