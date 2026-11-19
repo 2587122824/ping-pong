@@ -17,13 +17,14 @@ func _run() -> void:
 
 	game._start_battle(challenger)
 	assert(game.battle_panel.visible, "Starting a battle should show the battle panel")
-	assert(game.battle_hand.size() == 3, "A battle should start with three cards")
+	assert(game.battle_hand.size() == 5, "A battle should start with five cards")
 
 	var forehand_index := _find_card(game, "forehand")
 	assert(forehand_index >= 0, "The opening hand should contain a forehand card")
 	game._play_battle_card(forehand_index)
 	assert(game.battle_opponent_hp == 24, "Forehand should deal six damage")
 	assert(game.battle_energy == 2, "Forehand should cost one energy")
+	assert(game.battle_hand.size() == 4, "Playing a card should not immediately draw a replacement")
 
 	var guard_index := _find_card(game, "guard")
 	assert(guard_index >= 0, "The opening hand should contain a guard card")
@@ -33,6 +34,7 @@ func _run() -> void:
 	assert(game.battle_player_hp == 29, "Seven block should reduce an eight damage attack to one")
 	assert(game.battle_turn == 2, "Ending a surviving turn should advance the turn")
 	assert(game.battle_energy == 3, "A new turn should restore three energy")
+	assert(game.battle_hand.size() == 5, "Ending a surviving turn should refill the hand to five")
 
 	game.battle_opponent_hp = 4
 	var damage_index := _find_card(game, "backhand")

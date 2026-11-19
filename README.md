@@ -23,7 +23,7 @@
 & "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_trade.gd
 ```
 
-靠近顾言后按 `E` 开始牌战。每回合有 3 点能量，手牌包括攻击、格挡和削弱对手的牌；结束回合后对手按公开意图攻击。运行牌战冒烟测试：
+靠近顾言后按 `E` 开始牌战。战斗开始时抽取 5 张牌，每回合有 3 点能量；出牌后不会立即补牌，结束回合、结算对手攻击后才补齐到 5 张。手牌包括攻击、格挡和削弱对手的牌。运行牌战冒烟测试：
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_battle.gd

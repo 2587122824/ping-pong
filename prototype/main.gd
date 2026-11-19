@@ -696,12 +696,12 @@ func _setup_battle_ui(layer: CanvasLayer) -> void:
 
 	battle_cards_container = HBoxContainer.new()
 	battle_cards_container.position = Vector2(32, 280)
-	battle_cards_container.size = Vector2(1128, 192)
-	battle_cards_container.add_theme_constant_override("separation", 14)
+	battle_cards_container.size = Vector2(1128, 205)
+	battle_cards_container.add_theme_constant_override("separation", 10)
 	battle_panel.add_child(battle_cards_container)
-	for index in range(3):
+	for index in range(5):
 		var card_button := Button.new()
-		card_button.custom_minimum_size = Vector2(360, 192)
+		card_button.custom_minimum_size = Vector2(210, 200)
 		card_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		card_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -978,12 +978,12 @@ func _start_battle(npc: Node3D) -> void:
 	battle_deck = player_deck.duplicate()
 	battle_discard.clear()
 	battle_hand.clear()
-	_draw_battle_cards_to_three()
+	_draw_battle_cards_to_five()
 	battle_panel.visible = true
 	_refresh_battle_ui()
 
-func _draw_battle_cards_to_three() -> void:
-	while battle_hand.size() < 3:
+func _draw_battle_cards_to_five() -> void:
+	while battle_hand.size() < 5:
 		if battle_deck.is_empty():
 			if battle_discard.is_empty():
 				break
@@ -1022,8 +1022,6 @@ func _play_battle_card(index: int) -> void:
 		battle_finished = true
 		battle_won = true
 		battle_feedback_text = "你赢下了牌战。顾言认可了你的读牌能力。"
-	else:
-		_draw_battle_cards_to_three()
 	_refresh_battle_ui()
 
 func _end_battle_turn() -> void:
@@ -1052,7 +1050,7 @@ func _end_battle_turn() -> void:
 		battle_energy = 3
 		battle_block = 0
 		battle_weakens_opponent = false
-		_draw_battle_cards_to_three()
+		_draw_battle_cards_to_five()
 	_refresh_battle_ui()
 
 func _close_battle() -> void:
@@ -1074,7 +1072,7 @@ func _refresh_battle_ui() -> void:
 	battle_player_hp_bar.value = battle_player_hp
 	battle_opponent_hp_bar.value = battle_opponent_hp
 	battle_status.text = "能量  %d / 3     格挡  %d" % [battle_energy, battle_block]
-	battle_deck_label.text = "你的手牌     %d 张在手  ·  牌库 %d  ·  弃牌 %d" % [battle_hand.size(), battle_deck.size(), battle_discard.size()]
+	battle_deck_label.text = "你的手牌     %d / 5 张  ·  牌库 %d  ·  弃牌 %d" % [battle_hand.size(), battle_deck.size(), battle_discard.size()]
 	if battle_finished:
 		battle_intent.text = "牌战结束 · %s" % ("胜利" if battle_won else "失败")
 	else:
