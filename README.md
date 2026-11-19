@@ -10,3 +10,9 @@
 - [产品决策记录](docs/DECISION_LOG.md)
 - [未来文明模拟 v0.1](docs/FUTURE_WORLD_SIMULATION_V0_1.md)
 - [项目交接状态](docs/HANDOFF_CONTEXT.md)
+
+## 当前原型
+
+`prototype/` 是第一个可运行原型：Godot 4.x 空 3D 场景、近距离第三人称移动、两个 NPC 和基础对话。
+
+安装 Godot 4.x 后导入 `prototype/project.godot` 并运行。使用 `WASD` 移动，靠近 NPC 后按 `E` 对话，按 `Esc` 关闭对话。
