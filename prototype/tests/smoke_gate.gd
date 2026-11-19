@@ -23,8 +23,13 @@ func _run() -> void:
 	await process_frame
 	assert(current_scene != null and current_scene.name == "TransitRoom", "Entering the gate should change to the transit scene")
 	var transit: Node = current_scene
-	assert(transit.has_method("_return_to_test_area"), "Transit scene should provide a return action")
-	transit._return_to_test_area()
+	var return_gate: Node3D = transit.get_node("TransitGate")
+	assert(return_gate != null, "Transit scene should also contain a return gate")
+	assert(return_gate.get_meta("target_scene") == "res://Main.tscn", "Return gate should point to the original scene")
+	assert(transit.gate_panel != null and not transit.gate_panel.visible, "Return gate panel should start hidden")
+	transit._open_gate_panel()
+	assert(transit.gate_panel.visible, "Return gate should open the confirmation panel")
+	transit._enter_gate()
 	await process_frame
 	assert(current_scene != null and current_scene.name == "Prototype", "Returning should load the original test area")
 
