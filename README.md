@@ -13,7 +13,7 @@
 
 ## 当前原型
 
-`prototype/` 是第一个可运行原型：Godot 4.7.x 3D 测试区、近距离第三人称移动、两个对话 NPC、一个商人 NPC、背包与交易，以及一个可往返的场景入口。
+`prototype/` 是第一个可运行原型：Godot 4.7.x 3D 测试区、近距离第三人称移动、对话与商人 NPC、背包与交易、双向场景入口，以及可挑战顾言的简易回合制卡牌战斗。
 
 安装 Godot 4.7.x 标准版后导入 `prototype/project.godot` 并运行。Windows 本地默认安装路径为 `%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。使用 `WASD` 移动，靠近 NPC 后按 `E` 对话；靠近任一场景的“区域传送门”后按 `E`，会立即在测试区和“中转庭院”之间来回传送，传送后角色会出现在目标门旁。
 
@@ -21,6 +21,12 @@
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_trade.gd
+```
+
+靠近顾言后按 `E` 开始牌战。每回合有 3 点能量，手牌包括攻击、格挡和削弱对手的牌；结束回合后对手按公开意图攻击。运行牌战冒烟测试：
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_battle.gd
 ```
 
 运行大门入口冒烟测试：

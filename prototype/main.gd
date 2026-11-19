@@ -18,8 +18,35 @@ var shop_title: Label
 var shop_balance: Label
 var shop_feedback: Label
 var shop_rows: VBoxContainer
+var battle_panel: Panel
+var battle_status: Label
+var battle_intent: Label
+var battle_feedback: Label
+var battle_cards_container: HBoxContainer
+var battle_card_buttons: Array[Button] = []
+var battle_end_button: Button
+var battle_opponent: Node3D
 var dialogue_index := 0
 var dialogue_lines: Array[String] = []
+var battle_player_hp := 30
+var battle_opponent_hp := 30
+var battle_energy := 3
+var battle_block := 0
+var battle_turn := 1
+var battle_weakens_opponent := false
+var battle_finished := false
+var battle_won := false
+var battle_hand: Array[Dictionary] = []
+var battle_deck: Array[String] = []
+var battle_discard: Array[String] = []
+var battle_feedback_text := ""
+
+var battle_card_definitions := {
+	"forehand": {"name": "正手击打", "cost": 1, "type": "damage", "value": 6, "description": "造成 6 点伤害"},
+	"backhand": {"name": "反手快攻", "cost": 1, "type": "damage", "value": 4, "description": "造成 4 点伤害，消耗低"},
+	"guard": {"name": "架拍格挡", "cost": 1, "type": "block", "value": 7, "description": "抵挡本回合 7 点伤害"},
+	"curve": {"name": "旋球扰乱", "cost": 2, "type": "disrupt", "value": 3, "description": "造成 3 点伤害，并削弱对手本回合攻击"}
+}
 var money := 120
 var inventory := {
 	"energy_drink": 1,
@@ -64,6 +91,14 @@ var npcs := [
 		"color": Color("#f4b942"),
 		"type": "merchant",
 		"lines": []
+	},
+	{
+		"name": "顾言",
+		"role": "策略社牌战挑战者",
+		"position": Vector3(5.5, 1.0, -9.0),
+		"color": Color("#a78bfa"),
+		"type": "duelist",
+		"lines": ["来打一局？我会提前亮出下一次进攻意图。"]
 	}
 ]
 
@@ -94,8 +129,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_I and not _is_modal_open():
 			_toggle_inventory()
 		elif event.keycode == KEY_ESCAPE:
-			_close_dialogue()
-			_close_shop()
+			if battle_panel != null and battle_panel.visible:
+				_close_battle()
+			else:
+				_close_dialogue()
+				_close_shop()
 
 func _setup_world() -> void:
 	var environment := WorldEnvironment.new()
@@ -362,8 +400,80 @@ func _setup_ui() -> void:
 	close_hint.add_theme_font_size_override("font_size", 18)
 	close_hint.add_theme_color_override("font_color", Color("#a9bfd1"))
 	shop_panel.add_child(close_hint)
+	_setup_battle_ui(layer)
 
 	_refresh_economy_hud()
+
+func _setup_battle_ui(layer: CanvasLayer) -> void:
+	battle_panel = Panel.new()
+	battle_panel.position = Vector2(100, 60)
+	battle_panel.size = Vector2(1080, 600)
+	battle_panel.visible = false
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.025, 0.06, 0.11, 0.98)
+	style.border_color = Color("#a78bfa")
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	battle_panel.add_theme_stylebox_override("panel", style)
+	layer.add_child(battle_panel)
+
+	var title := Label.new()
+	title.position = Vector2(28, 20)
+	title.size = Vector2(1024, 40)
+	title.text = "策略社牌战"
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color("#ddd6fe"))
+	battle_panel.add_child(title)
+
+	battle_status = Label.new()
+	battle_status.position = Vector2(28, 74)
+	battle_status.size = Vector2(1024, 44)
+	battle_status.add_theme_font_size_override("font_size", 20)
+	battle_status.add_theme_color_override("font_color", Color("#f1f5f9"))
+	battle_panel.add_child(battle_status)
+
+	battle_intent = Label.new()
+	battle_intent.position = Vector2(28, 128)
+	battle_intent.size = Vector2(1024, 42)
+	battle_intent.add_theme_font_size_override("font_size", 19)
+	battle_intent.add_theme_color_override("font_color", Color("#fbbf24"))
+	battle_panel.add_child(battle_intent)
+
+	battle_cards_container = HBoxContainer.new()
+	battle_cards_container.position = Vector2(28, 195)
+	battle_cards_container.size = Vector2(1024, 220)
+	battle_cards_container.add_theme_constant_override("separation", 16)
+	battle_panel.add_child(battle_cards_container)
+	for index in range(3):
+		var card_button := Button.new()
+		card_button.custom_minimum_size = Vector2(330, 210)
+		card_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card_button.add_theme_font_size_override("font_size", 21)
+		card_button.pressed.connect(_play_battle_card.bind(index))
+		battle_cards_container.add_child(card_button)
+		battle_card_buttons.append(card_button)
+
+	battle_feedback = Label.new()
+	battle_feedback.position = Vector2(28, 438)
+	battle_feedback.size = Vector2(700, 64)
+	battle_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	battle_feedback.add_theme_font_size_override("font_size", 18)
+	battle_feedback.add_theme_color_override("font_color", Color("#a7f3d0"))
+	battle_panel.add_child(battle_feedback)
+
+	battle_end_button = Button.new()
+	battle_end_button.position = Vector2(800, 500)
+	battle_end_button.size = Vector2(250, 52)
+	battle_end_button.text = "结束回合"
+	battle_end_button.pressed.connect(_end_battle_turn)
+	battle_panel.add_child(battle_end_button)
+
+	var leave_button := Button.new()
+	leave_button.position = Vector2(28, 500)
+	leave_button.size = Vector2(180, 52)
+	leave_button.text = "离开牌战  [Esc]"
+	leave_button.pressed.connect(_close_battle)
+	battle_panel.add_child(leave_button)
 
 func _move_player(_delta: float) -> void:
 	if _is_modal_open():
@@ -420,16 +530,22 @@ func _update_nearby_npc() -> void:
 	if nearby_gate != null and current_gate_distance < npc_distance:
 		interaction_hint.text = "区域传送门 · 按 E 传送至中转庭院"
 	elif nearby_npc != null:
-		if nearby_npc.get_meta("npc_type", "dialogue") == "merchant":
+		var npc_type: String = nearby_npc.get_meta("npc_type", "dialogue")
+		if npc_type == "merchant":
 			interaction_hint.text = "与 %s 交易 · 按 E 打开商店" % nearby_npc.name
+		elif npc_type == "duelist":
+			interaction_hint.text = "挑战 %s · 按 E 开始牌战" % nearby_npc.name
 		else:
 			interaction_hint.text = "靠近 %s · 按 E 对话" % nearby_npc.name
 	else:
 		interaction_hint.text = "WASD 移动 · 靠近 NPC 或入口后按 E 交互"
 
 func _interact_with_npc(npc: Node3D) -> void:
-	if npc.get_meta("npc_type", "dialogue") == "merchant":
+	var npc_type: String = npc.get_meta("npc_type", "dialogue")
+	if npc_type == "merchant":
 		_open_shop(npc)
+	elif npc_type == "duelist":
+		_start_battle(npc)
 	else:
 		_open_or_advance_dialogue(npc)
 
@@ -453,7 +569,7 @@ func _close_dialogue() -> void:
 	dialogue_panel.visible = false
 
 func _is_modal_open() -> bool:
-	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible)
+	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible)
 
 func _enter_gate() -> void:
 	var error := get_tree().change_scene_to_file("res://TransitRoom.tscn")
@@ -540,6 +656,134 @@ func _get_shop_item(item_id: String) -> Dictionary:
 		if item["id"] == item_id:
 			return item
 	return {}
+
+func _start_battle(npc: Node3D) -> void:
+	_close_dialogue()
+	_close_shop()
+	battle_opponent = npc
+	battle_player_hp = 30
+	battle_opponent_hp = 30
+	battle_energy = 3
+	battle_block = 0
+	battle_turn = 1
+	battle_weakens_opponent = false
+	battle_finished = false
+	battle_won = false
+	battle_feedback_text = "牌战开始。先读出对手意图，再决定出牌或结束回合。"
+	battle_deck = ["forehand", "backhand", "guard", "curve", "forehand", "backhand", "guard", "curve", "forehand", "backhand"]
+	battle_discard.clear()
+	battle_hand.clear()
+	_draw_battle_cards_to_three()
+	battle_panel.visible = true
+	_refresh_battle_ui()
+
+func _draw_battle_cards_to_three() -> void:
+	while battle_hand.size() < 3:
+		if battle_deck.is_empty():
+			if battle_discard.is_empty():
+				break
+			battle_deck = battle_discard.duplicate()
+			battle_discard.clear()
+			battle_deck.shuffle()
+		var card_id: String = battle_deck.pop_front()
+		battle_hand.append({"id": card_id})
+
+func _play_battle_card(index: int) -> void:
+	if not battle_panel.visible or battle_finished:
+		return
+	if index < 0 or index >= battle_hand.size():
+		return
+	var card_id: String = battle_hand[index]["id"]
+	var card: Dictionary = battle_card_definitions[card_id]
+	if battle_energy < card["cost"]:
+		battle_feedback_text = "能量不足，无法使用「%s」。" % card["name"]
+		_refresh_battle_ui()
+		return
+	battle_energy -= card["cost"]
+	match card["type"]:
+		"damage":
+			battle_opponent_hp = max(0, battle_opponent_hp - card["value"])
+			battle_feedback_text = "你使用「%s」，造成 %d 点伤害。" % [card["name"], card["value"]]
+		"block":
+			battle_block += card["value"]
+			battle_feedback_text = "你使用「%s」，获得 %d 点格挡。" % [card["name"], card["value"]]
+		"disrupt":
+			battle_opponent_hp = max(0, battle_opponent_hp - card["value"])
+			battle_weakens_opponent = true
+			battle_feedback_text = "你使用「%s」，造成 %d 点伤害并削弱本回合攻击。" % [card["name"], card["value"]]
+	battle_discard.append(card_id)
+	battle_hand.remove_at(index)
+	if battle_opponent_hp <= 0:
+		battle_finished = true
+		battle_won = true
+		battle_feedback_text = "你赢下了牌战。顾言认可了你的读牌能力。"
+	else:
+		_draw_battle_cards_to_three()
+	_refresh_battle_ui()
+
+func _end_battle_turn() -> void:
+	if not battle_panel.visible:
+		return
+	if battle_finished:
+		_close_battle()
+		return
+	var incoming_damage := 8
+	if battle_weakens_opponent:
+		incoming_damage = 4
+	var blocked_damage: int = min(battle_block, incoming_damage)
+	var actual_damage: int = incoming_damage - blocked_damage
+	battle_block = max(0, battle_block - incoming_damage)
+	battle_player_hp = max(0, battle_player_hp - actual_damage)
+	if actual_damage == 0:
+		battle_feedback_text = "顾言发动 %d 点攻击，但被你的格挡完全挡下。" % incoming_damage
+	else:
+		battle_feedback_text = "顾言发动 %d 点攻击，你受到 %d 点伤害。" % [incoming_damage, actual_damage]
+	if battle_player_hp <= 0:
+		battle_finished = true
+		battle_won = false
+		battle_feedback_text = "你输掉了牌战。调整出牌节奏后再来挑战。"
+	else:
+		battle_turn += 1
+		battle_energy = 3
+		battle_block = 0
+		battle_weakens_opponent = false
+		_draw_battle_cards_to_three()
+	_refresh_battle_ui()
+
+func _close_battle() -> void:
+	if battle_panel != null:
+		battle_panel.visible = false
+	battle_opponent = null
+	battle_finished = false
+	battle_won = false
+	battle_hand.clear()
+	battle_deck.clear()
+	battle_discard.clear()
+
+func _refresh_battle_ui() -> void:
+	if battle_panel == null or not battle_panel.visible:
+		return
+	var opponent_name := "对手"
+	if battle_opponent != null:
+		opponent_name = battle_opponent.name
+	battle_status.text = "回合 %d    你：%d / 30 HP    %s：%d / 30 HP    能量：%d / 3    格挡：%d" % [battle_turn, battle_player_hp, opponent_name, battle_opponent_hp, battle_energy, battle_block]
+	if battle_finished:
+		battle_intent.text = "牌战结束 · %s" % ("胜利" if battle_won else "失败")
+	else:
+		battle_intent.text = "对手意图：普通击打 8 点伤害　·　旋球扰乱可将其降为 4 点"
+	battle_feedback.text = battle_feedback_text
+	battle_end_button.text = "离开牌战" if battle_finished else "结束回合"
+	battle_end_button.disabled = false
+	for index in range(battle_card_buttons.size()):
+		var button := battle_card_buttons[index]
+		if index < battle_hand.size():
+			var card_id: String = battle_hand[index]["id"]
+			var card: Dictionary = battle_card_definitions[card_id]
+			button.text = "%s\n\n费用：%d\n%s" % [card["name"], card["cost"], card["description"]]
+			button.disabled = battle_finished or battle_energy < card["cost"]
+		else:
+			button.text = "空牌位"
+			button.disabled = true
 
 func _material(color: Color, emissive := false) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
