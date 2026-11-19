@@ -18,6 +18,8 @@ func _run() -> void:
 	game._start_battle(challenger)
 	assert(game.battle_panel.visible, "Starting a battle should show the battle panel")
 	assert(game.battle_hand.size() == 5, "A battle should start with five cards")
+	assert(game.battle_card_widgets.size() == 5, "The battle should create five structured card faces")
+	assert(game.battle_animation_layer != null, "The battle should create a card animation layer")
 
 	var forehand_index := _find_card(game, "forehand")
 	assert(forehand_index >= 0, "The opening hand should contain a forehand card")
@@ -59,6 +61,19 @@ func _run() -> void:
 	game._play_battle_card(damage_index)
 	assert(game.battle_finished, "Reducing the opponent to zero should finish the battle")
 	assert(game.battle_won, "Reducing the opponent to zero should mark a victory")
+
+	game._start_battle(challenger)
+	game.battle_hand.clear()
+	game.battle_deck.clear()
+	game.battle_discard.clear()
+	for recycled_card in ["forehand", "backhand", "guard", "curve", "forehand"]:
+		game.battle_discard.append(recycled_card)
+	game._draw_battle_cards_to_five()
+	assert(game.battle_shuffle_pending, "Recycling the discard pile should request a shuffle animation")
+	assert(game.battle_pending_draw_indices.size() == 5, "Each recycled card should be queued for a draw animation")
+	game._refresh_battle_ui()
+	assert(not game.battle_shuffle_pending, "Refreshing the battle UI should launch and clear the shuffle animation request")
+	assert(game.battle_pending_draw_indices.is_empty(), "Launching draw animations should clear the draw queue")
 
 	print("Battle smoke test passed")
 	quit()

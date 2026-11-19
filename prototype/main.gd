@@ -41,6 +41,10 @@ var battle_player_hp_text: Label
 var battle_opponent_hp_text: Label
 var battle_cards_container: HBoxContainer
 var battle_card_buttons: Array[Button] = []
+var battle_card_widgets: Array[Dictionary] = []
+var battle_pending_draw_indices: Array[int] = []
+var battle_shuffle_pending := false
+var battle_animation_layer: Control
 var battle_end_button: Button
 var battle_opponent: Node3D
 var dialogue_index := 0
@@ -689,28 +693,72 @@ func _setup_battle_ui(layer: CanvasLayer) -> void:
 	battle_panel.add_child(battle_deck_label)
 
 	battle_cards_container = HBoxContainer.new()
-	battle_cards_container.position = Vector2(32, 280)
-	battle_cards_container.size = Vector2(1128, 205)
+	battle_cards_container.position = Vector2(32, 274)
+	battle_cards_container.size = Vector2(1128, 232)
 	battle_cards_container.add_theme_constant_override("separation", 10)
 	battle_panel.add_child(battle_cards_container)
 	for index in range(5):
 		var card_button := Button.new()
-		card_button.custom_minimum_size = Vector2(210, 200)
+		card_button.custom_minimum_size = Vector2(210, 224)
 		card_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		card_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		card_button.add_theme_font_size_override("font_size", 18)
-		card_button.add_theme_stylebox_override("normal", _battle_card_style(Color("#27344d"), Color("#586a89")))
-		card_button.add_theme_stylebox_override("hover", _battle_card_style(Color("#354565"), Color("#b6c8ff")))
-		card_button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#17243a"), Color("#dbeafe")))
-		card_button.add_theme_stylebox_override("disabled", _battle_card_style(Color("#161f30"), Color("#344056")))
+		card_button.add_theme_stylebox_override("normal", _battle_card_style(Color("#151e30"), Color("#586a89")))
+		card_button.add_theme_stylebox_override("hover", _battle_card_style(Color("#202c42"), Color("#dbeafe")))
+		card_button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#111827"), Color("#dbeafe")))
+		card_button.add_theme_stylebox_override("disabled", _battle_card_style(Color("#111827"), Color("#344056")))
+		var category_label := _make_card_label(Vector2(10, 8), Vector2(94, 22), 13, Color("#dbe7f5"))
+		card_button.add_child(category_label)
+		var limit_label := _make_card_label(Vector2(102, 8), Vector2(96, 22), 12, Color("#aebbd0"))
+		limit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		card_button.add_child(limit_label)
+		var name_label := _make_card_label(Vector2(10, 31), Vector2(188, 26), 18, Color("#f8fafc"))
+		card_button.add_child(name_label)
+		var art_panel := Panel.new()
+		art_panel.position = Vector2(10, 61)
+		art_panel.size = Vector2(188, 78)
+		art_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card_button.add_child(art_panel)
+		var art_style := StyleBoxFlat.new()
+		art_style.bg_color = Color("#0b1220")
+		art_style.set_border_width_all(1)
+		art_style.set_corner_radius_all(5)
+		art_panel.add_theme_stylebox_override("panel", art_style)
+		var art_symbol := _make_card_label(Vector2(0, 5), Vector2(188, 54), 34, Color.WHITE)
+		art_symbol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		art_panel.add_child(art_symbol)
+		var art_caption := _make_card_label(Vector2(0, 54), Vector2(188, 18), 10, Color("#91a0b8"))
+		art_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		art_caption.text = "TAKEPA  /  DUEL PROTOCOL"
+		art_panel.add_child(art_caption)
+		var description_label := _make_card_label(Vector2(10, 145), Vector2(188, 48), 13, Color("#cbd5e1"))
+		description_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		card_button.add_child(description_label)
+		var footer_label := _make_card_label(Vector2(10, 198), Vector2(188, 17), 10, Color("#71809a"))
+		footer_label.text = "TACTIC CARD     /     FIELD TEST"
+		card_button.add_child(footer_label)
 		card_button.pressed.connect(_play_battle_card.bind(index))
+		card_button.mouse_entered.connect(_animate_card_hover.bind(card_button, true))
+		card_button.mouse_exited.connect(_animate_card_hover.bind(card_button, false))
 		battle_cards_container.add_child(card_button)
 		battle_card_buttons.append(card_button)
+		battle_card_widgets.append({
+			"category": category_label,
+			"limit": limit_label,
+			"name": name_label,
+			"art": art_panel,
+			"symbol": art_symbol,
+			"description": description_label,
+			"footer": footer_label
+		})
+	battle_animation_layer = Control.new()
+	battle_animation_layer.position = Vector2.ZERO
+	battle_animation_layer.size = battle_panel.size
+	battle_animation_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	battle_animation_layer.z_index = 10
+	battle_panel.add_child(battle_animation_layer)
 
 	battle_feedback = Label.new()
-	battle_feedback.position = Vector2(32, 493)
-	battle_feedback.size = Vector2(720, 50)
+	battle_feedback.position = Vector2(32, 510)
+	battle_feedback.size = Vector2(720, 42)
 	battle_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	battle_feedback.add_theme_font_size_override("font_size", 17)
 	battle_feedback.add_theme_color_override("font_color", Color("#b7f7e7"))
@@ -764,12 +812,21 @@ func _battle_card_style(background_color: Color, border_color: Color) -> StyleBo
 	style.bg_color = background_color
 	style.border_color = border_color
 	style.set_border_width_all(2)
-	style.set_corner_radius_all(12)
-	style.content_margin_left = 18
-	style.content_margin_right = 18
-	style.content_margin_top = 14
-	style.content_margin_bottom = 14
+	style.set_corner_radius_all(8)
+	style.content_margin_left = 8
+	style.content_margin_right = 8
+	style.content_margin_top = 8
+	style.content_margin_bottom = 8
 	return style
+
+func _make_card_label(position: Vector2, size: Vector2, font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.position = position
+	label.size = size
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
 
 func _move_player(_delta: float) -> void:
 	if _is_modal_open():
@@ -976,7 +1033,7 @@ func _start_battle(npc: Node3D) -> void:
 	battle_panel.visible = true
 	_refresh_battle_ui()
 
-func _draw_battle_cards_to_five() -> void:
+func _draw_battle_cards_to_five(animate := true) -> void:
 	while battle_hand.size() < 5:
 		if battle_deck.is_empty():
 			if battle_discard.is_empty():
@@ -984,8 +1041,12 @@ func _draw_battle_cards_to_five() -> void:
 			battle_deck = battle_discard.duplicate()
 			battle_discard.clear()
 			battle_deck.shuffle()
+			if animate:
+				battle_shuffle_pending = true
 		var card_id: String = battle_deck.pop_front()
 		battle_hand.append({"id": card_id})
+		if animate:
+			battle_pending_draw_indices.append(battle_hand.size() - 1)
 
 func _play_battle_card(index: int) -> void:
 	if not battle_panel.visible or battle_finished:
@@ -994,6 +1055,7 @@ func _play_battle_card(index: int) -> void:
 		return
 	var card_id: String = battle_hand[index]["id"]
 	var card: Dictionary = battle_card_definitions[card_id]
+	var card_origin := battle_cards_container.position + battle_card_buttons[index].position
 	var card_type := String(card["type"])
 	var used_count: int = battle_type_uses.get(card_type, 0)
 	if used_count >= BATTLE_CARD_TYPE_LIMIT:
@@ -1016,6 +1078,7 @@ func _play_battle_card(index: int) -> void:
 			battle_feedback_text = "你使用「%s」。" % card["name"]
 	battle_discard.append(card_id)
 	battle_hand.remove_at(index)
+	_animate_played_card(card, card_origin)
 	if battle_opponent_hp <= 0:
 		battle_finished = true
 		battle_won = true
@@ -1088,17 +1151,53 @@ func _refresh_battle_ui() -> void:
 			var category := _card_category(card_type)
 			var accent := _card_accent(card_type)
 			var used_count: int = battle_type_uses.get(card_type, 0)
-			button.text = "%s     本回合 %d/%d\n\n%s\n%s" % [category, used_count, BATTLE_CARD_TYPE_LIMIT, card["name"], card["description"]]
-			button.add_theme_color_override("font_color", Color("#dbe7f5"))
-			button.add_theme_color_override("font_hover_color", Color.WHITE)
-			button.add_theme_color_override("font_disabled_color", Color("#67748a"))
+			var widgets: Dictionary = battle_card_widgets[index]
+			var category_label: Label = widgets["category"]
+			category_label.text = category.to_upper()
+			category_label.add_theme_color_override("font_color", accent)
+			var limit_label: Label = widgets["limit"]
+			limit_label.text = "%d / %d" % [used_count, BATTLE_CARD_TYPE_LIMIT]
+			limit_label.add_theme_color_override("font_color", accent if used_count == 0 else Color("#64748b"))
+			var name_label: Label = widgets["name"]
+			name_label.text = card["name"]
+			var art_panel: Panel = widgets["art"]
+			var art_style: StyleBoxFlat = art_panel.get_theme_stylebox("panel").duplicate()
+			art_style.border_color = Color(accent, 0.65)
+			art_panel.add_theme_stylebox_override("panel", art_style)
+			var art_symbol: Label = widgets["symbol"]
+			art_symbol.text = _card_symbol(card_type)
+			art_symbol.add_theme_color_override("font_color", accent)
+			var description_label: Label = widgets["description"]
+			description_label.text = card["description"]
+			var footer_label: Label = widgets["footer"]
+			footer_label.text = "TYPE %s     /     FIELD TEST" % card_type.to_upper()
 			button.add_theme_stylebox_override("normal", _battle_card_style(Color("#202c42"), Color(accent, 0.75)))
 			button.add_theme_stylebox_override("hover", _battle_card_style(Color("#2a3a56"), accent))
 			button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#151f32"), accent))
 			button.disabled = battle_finished or used_count >= BATTLE_CARD_TYPE_LIMIT
+			button.modulate = Color("#64748b") if button.disabled else Color.WHITE
 		else:
-			button.text = "待抽取"
+			var empty_widgets: Dictionary = battle_card_widgets[index]
+			(empty_widgets["category"] as Label).text = "EMPTY SLOT"
+			(empty_widgets["limit"] as Label).text = "—"
+			(empty_widgets["name"] as Label).text = "待抽取"
+			(empty_widgets["symbol"] as Label).text = "·"
+			(empty_widgets["description"] as Label).text = "等待下一轮补牌"
+			(empty_widgets["footer"] as Label).text = "TAKEPA  /  CARD SLOT"
 			button.disabled = true
+			button.modulate = Color("#64748b")
+	if battle_shuffle_pending:
+		battle_shuffle_pending = false
+		_animate_shuffle()
+		if not battle_pending_draw_indices.is_empty():
+			var delayed_indices := battle_pending_draw_indices.duplicate()
+			battle_pending_draw_indices.clear()
+			get_tree().create_timer(0.28).timeout.connect(_animate_draw_cards.bind(delayed_indices))
+	else:
+		if not battle_pending_draw_indices.is_empty():
+			var drawn_indices := battle_pending_draw_indices.duplicate()
+			battle_pending_draw_indices.clear()
+			_animate_draw_cards(drawn_indices)
 
 func _battle_type_limit_summary() -> String:
 	var type_order: Array[String] = []
@@ -1132,6 +1231,73 @@ func _card_accent(card_type: String) -> Color:
 			return Color("#c4b5fd")
 		_:
 			return Color("#fbbf24")
+
+func _card_symbol(card_type: String) -> String:
+	match card_type:
+		"damage":
+			return "▲"
+		"block":
+			return "◇"
+		"disrupt":
+			return "✦"
+		_:
+			return "•"
+
+func _animate_card_hover(button: Button, hovered: bool) -> void:
+	if not is_instance_valid(button) or button.disabled:
+		return
+	button.pivot_offset = button.size / 2.0
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(button, "scale", Vector2(1.035, 1.035) if hovered else Vector2.ONE, 0.12)
+
+func _animate_draw_cards(indices: Array) -> void:
+	for index in indices:
+		if index < 0 or index >= battle_card_buttons.size() or index >= battle_hand.size():
+			continue
+		var button := battle_card_buttons[index]
+		button.pivot_offset = button.size / 2.0
+		button.modulate = Color(1, 1, 1, 0)
+		button.scale = Vector2(0.84, 0.84)
+		button.rotation = deg_to_rad(4.0 if index % 2 == 0 else -4.0)
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tween.tween_property(button, "modulate", Color.WHITE, 0.18)
+		tween.parallel().tween_property(button, "scale", Vector2.ONE, 0.28)
+		tween.parallel().tween_property(button, "rotation", 0.0, 0.28)
+
+func _animate_played_card(card: Dictionary, origin: Vector2) -> void:
+	if battle_animation_layer == null:
+		return
+	var ghost := Panel.new()
+	ghost.position = origin
+	ghost.size = Vector2(210, 224)
+	ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ghost.pivot_offset = ghost.size / 2.0
+	var accent := _card_accent(String(card["type"]))
+	ghost.add_theme_stylebox_override("panel", _battle_card_style(Color("#202c42"), accent))
+	var label := _make_card_label(Vector2(12, 18), Vector2(186, 110), 20, Color("#f8fafc"))
+	label.text = "%s\n\n%s" % [_card_category(String(card["type"])), card["name"]]
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ghost.add_child(label)
+	battle_animation_layer.add_child(ghost)
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(ghost, "position", Vector2(1010, 448), 0.34)
+	tween.parallel().tween_property(ghost, "scale", Vector2(0.52, 0.52), 0.34)
+	tween.parallel().tween_property(ghost, "modulate", Color(1, 1, 1, 0), 0.34)
+	tween.tween_callback(ghost.queue_free)
+
+func _animate_shuffle() -> void:
+	for index in range(battle_card_buttons.size()):
+		var button := battle_card_buttons[index]
+		button.pivot_offset = button.size / 2.0
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		tween.tween_interval(index * 0.025)
+		tween.tween_property(button, "rotation", deg_to_rad(5.0 if index % 2 == 0 else -5.0), 0.08)
+		tween.tween_property(button, "rotation", deg_to_rad(-4.0 if index % 2 == 0 else 4.0), 0.08)
+		tween.tween_property(button, "rotation", 0.0, 0.1)
 
 func _material(color: Color, emissive := false) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
