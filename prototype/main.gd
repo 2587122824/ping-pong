@@ -22,6 +22,12 @@ var battle_panel: Panel
 var battle_status: Label
 var battle_intent: Label
 var battle_feedback: Label
+var battle_turn_label: Label
+var battle_deck_label: Label
+var battle_player_hp_bar: ProgressBar
+var battle_opponent_hp_bar: ProgressBar
+var battle_player_hp_text: Label
+var battle_opponent_hp_text: Label
 var battle_cards_container: HBoxContainer
 var battle_card_buttons: Array[Button] = []
 var battle_end_button: Button
@@ -406,74 +412,178 @@ func _setup_ui() -> void:
 
 func _setup_battle_ui(layer: CanvasLayer) -> void:
 	battle_panel = Panel.new()
-	battle_panel.position = Vector2(100, 60)
-	battle_panel.size = Vector2(1080, 600)
+	battle_panel.position = Vector2(44, 34)
+	battle_panel.size = Vector2(1192, 652)
 	battle_panel.visible = false
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.025, 0.06, 0.11, 0.98)
-	style.border_color = Color("#a78bfa")
+	style.bg_color = Color("#0b1020")
+	style.border_color = Color("#7164b8")
 	style.set_border_width_all(2)
-	style.set_corner_radius_all(8)
+	style.set_corner_radius_all(16)
 	battle_panel.add_theme_stylebox_override("panel", style)
 	layer.add_child(battle_panel)
 
 	var title := Label.new()
-	title.position = Vector2(28, 20)
-	title.size = Vector2(1024, 40)
-	title.text = "策略社牌战"
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color("#ddd6fe"))
+	title.position = Vector2(32, 18)
+	title.size = Vector2(650, 30)
+	title.text = "STRATEGY CLUB  //  牌战协议"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color("#a99cf2"))
 	battle_panel.add_child(title)
 
+	battle_turn_label = Label.new()
+	battle_turn_label.position = Vector2(870, 18)
+	battle_turn_label.size = Vector2(290, 30)
+	battle_turn_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	battle_turn_label.text = "DUEL  01"
+	battle_turn_label.add_theme_font_size_override("font_size", 16)
+	battle_turn_label.add_theme_color_override("font_color", Color("#c4b5fd"))
+	battle_panel.add_child(battle_turn_label)
+
+	var player_status := _make_battle_status_panel(Vector2(32, 62), Vector2(540, 94), Color("#1d827d"))
+	battle_panel.add_child(player_status)
+	var player_name := Label.new()
+	player_name.position = Vector2(18, 10)
+	player_name.text = "你  /  PLAYER"
+	player_name.add_theme_font_size_override("font_size", 17)
+	player_name.add_theme_color_override("font_color", Color("#99f6e4"))
+	player_status.add_child(player_name)
+	battle_player_hp_text = Label.new()
+	battle_player_hp_text.position = Vector2(430, 10)
+	battle_player_hp_text.size = Vector2(90, 26)
+	battle_player_hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	battle_player_hp_text.add_theme_font_size_override("font_size", 17)
+	battle_player_hp_text.add_theme_color_override("font_color", Color("#e6fffb"))
+	player_status.add_child(battle_player_hp_text)
+	battle_player_hp_bar = _make_battle_hp_bar(Color("#35d0c2"))
+	battle_player_hp_bar.position = Vector2(18, 52)
+	battle_player_hp_bar.size = Vector2(504, 20)
+	player_status.add_child(battle_player_hp_bar)
+
+	var opponent_status := _make_battle_status_panel(Vector2(620, 62), Vector2(540, 94), Color("#7c54b5"))
+	battle_panel.add_child(opponent_status)
+	var opponent_name := Label.new()
+	opponent_name.position = Vector2(18, 10)
+	opponent_name.text = "顾言  /  DUELIST"
+	opponent_name.add_theme_font_size_override("font_size", 17)
+	opponent_name.add_theme_color_override("font_color", Color("#ddd6fe"))
+	opponent_status.add_child(opponent_name)
+	battle_opponent_hp_text = Label.new()
+	battle_opponent_hp_text.position = Vector2(430, 10)
+	battle_opponent_hp_text.size = Vector2(90, 26)
+	battle_opponent_hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	battle_opponent_hp_text.add_theme_font_size_override("font_size", 17)
+	battle_opponent_hp_text.add_theme_color_override("font_color", Color("#f4edff"))
+	opponent_status.add_child(battle_opponent_hp_text)
+	battle_opponent_hp_bar = _make_battle_hp_bar(Color("#b38cff"))
+	battle_opponent_hp_bar.position = Vector2(18, 52)
+	battle_opponent_hp_bar.size = Vector2(504, 20)
+	opponent_status.add_child(battle_opponent_hp_bar)
+
 	battle_status = Label.new()
-	battle_status.position = Vector2(28, 74)
-	battle_status.size = Vector2(1024, 44)
-	battle_status.add_theme_font_size_override("font_size", 20)
-	battle_status.add_theme_color_override("font_color", Color("#f1f5f9"))
+	battle_status.position = Vector2(32, 170)
+	battle_status.size = Vector2(1128, 34)
+	battle_status.add_theme_font_size_override("font_size", 18)
+	battle_status.add_theme_color_override("font_color", Color("#e6edf7"))
 	battle_panel.add_child(battle_status)
 
 	battle_intent = Label.new()
-	battle_intent.position = Vector2(28, 128)
-	battle_intent.size = Vector2(1024, 42)
-	battle_intent.add_theme_font_size_override("font_size", 19)
-	battle_intent.add_theme_color_override("font_color", Color("#fbbf24"))
+	battle_intent.position = Vector2(32, 208)
+	battle_intent.size = Vector2(1128, 38)
+	battle_intent.add_theme_font_size_override("font_size", 17)
+	battle_intent.add_theme_color_override("font_color", Color("#fde68a"))
 	battle_panel.add_child(battle_intent)
 
+	battle_deck_label = Label.new()
+	battle_deck_label.position = Vector2(32, 252)
+	battle_deck_label.size = Vector2(1128, 26)
+	battle_deck_label.text = "你的手牌"
+	battle_deck_label.add_theme_font_size_override("font_size", 16)
+	battle_deck_label.add_theme_color_override("font_color", Color("#9aa8bd"))
+	battle_panel.add_child(battle_deck_label)
+
 	battle_cards_container = HBoxContainer.new()
-	battle_cards_container.position = Vector2(28, 195)
-	battle_cards_container.size = Vector2(1024, 220)
-	battle_cards_container.add_theme_constant_override("separation", 16)
+	battle_cards_container.position = Vector2(32, 280)
+	battle_cards_container.size = Vector2(1128, 192)
+	battle_cards_container.add_theme_constant_override("separation", 14)
 	battle_panel.add_child(battle_cards_container)
 	for index in range(3):
 		var card_button := Button.new()
-		card_button.custom_minimum_size = Vector2(330, 210)
+		card_button.custom_minimum_size = Vector2(360, 192)
 		card_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card_button.add_theme_font_size_override("font_size", 21)
+		card_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		card_button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		card_button.add_theme_font_size_override("font_size", 18)
+		card_button.add_theme_stylebox_override("normal", _battle_card_style(Color("#27344d"), Color("#586a89")))
+		card_button.add_theme_stylebox_override("hover", _battle_card_style(Color("#354565"), Color("#b6c8ff")))
+		card_button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#17243a"), Color("#dbeafe")))
+		card_button.add_theme_stylebox_override("disabled", _battle_card_style(Color("#161f30"), Color("#344056")))
 		card_button.pressed.connect(_play_battle_card.bind(index))
 		battle_cards_container.add_child(card_button)
 		battle_card_buttons.append(card_button)
 
 	battle_feedback = Label.new()
-	battle_feedback.position = Vector2(28, 438)
-	battle_feedback.size = Vector2(700, 64)
+	battle_feedback.position = Vector2(32, 493)
+	battle_feedback.size = Vector2(720, 50)
 	battle_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	battle_feedback.add_theme_font_size_override("font_size", 18)
-	battle_feedback.add_theme_color_override("font_color", Color("#a7f3d0"))
+	battle_feedback.add_theme_font_size_override("font_size", 17)
+	battle_feedback.add_theme_color_override("font_color", Color("#b7f7e7"))
 	battle_panel.add_child(battle_feedback)
 
 	battle_end_button = Button.new()
-	battle_end_button.position = Vector2(800, 500)
+	battle_end_button.position = Vector2(910, 560)
 	battle_end_button.size = Vector2(250, 52)
 	battle_end_button.text = "结束回合"
+	battle_end_button.add_theme_font_size_override("font_size", 18)
 	battle_end_button.pressed.connect(_end_battle_turn)
 	battle_panel.add_child(battle_end_button)
 
 	var leave_button := Button.new()
-	leave_button.position = Vector2(28, 500)
-	leave_button.size = Vector2(180, 52)
-	leave_button.text = "离开牌战  [Esc]"
+	leave_button.position = Vector2(32, 560)
+	leave_button.size = Vector2(190, 52)
+	leave_button.text = "退出牌战  [Esc]"
+	leave_button.add_theme_font_size_override("font_size", 17)
 	leave_button.pressed.connect(_close_battle)
 	battle_panel.add_child(leave_button)
+
+func _make_battle_status_panel(position: Vector2, size: Vector2, accent: Color) -> Panel:
+	var panel := Panel.new()
+	panel.position = position
+	panel.size = size
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.055, 0.08, 0.15, 0.96)
+	style.border_color = Color(accent, 0.7)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(10)
+	panel.add_theme_stylebox_override("panel", style)
+	return panel
+
+func _make_battle_hp_bar(fill_color: Color) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.max_value = 30
+	bar.value = 30
+	bar.show_percentage = false
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color("#182238")
+	background.set_corner_radius_all(6)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = fill_color
+	fill.set_corner_radius_all(6)
+	bar.add_theme_stylebox_override("background", background)
+	bar.add_theme_stylebox_override("fill", fill)
+	return bar
+
+func _battle_card_style(background_color: Color, border_color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background_color
+	style.border_color = border_color
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	style.content_margin_top = 14
+	style.content_margin_bottom = 14
+	return style
 
 func _move_player(_delta: float) -> void:
 	if _is_modal_open():
@@ -763,14 +873,17 @@ func _close_battle() -> void:
 func _refresh_battle_ui() -> void:
 	if battle_panel == null or not battle_panel.visible:
 		return
-	var opponent_name := "对手"
-	if battle_opponent != null:
-		opponent_name = battle_opponent.name
-	battle_status.text = "回合 %d    你：%d / 30 HP    %s：%d / 30 HP    能量：%d / 3    格挡：%d" % [battle_turn, battle_player_hp, opponent_name, battle_opponent_hp, battle_energy, battle_block]
+	battle_turn_label.text = "DUEL  %02d" % battle_turn
+	battle_player_hp_text.text = "%d / 30" % battle_player_hp
+	battle_opponent_hp_text.text = "%d / 30" % battle_opponent_hp
+	battle_player_hp_bar.value = battle_player_hp
+	battle_opponent_hp_bar.value = battle_opponent_hp
+	battle_status.text = "能量  %d / 3     格挡  %d" % [battle_energy, battle_block]
+	battle_deck_label.text = "你的手牌     %d 张在手  ·  牌库 %d  ·  弃牌 %d" % [battle_hand.size(), battle_deck.size(), battle_discard.size()]
 	if battle_finished:
 		battle_intent.text = "牌战结束 · %s" % ("胜利" if battle_won else "失败")
 	else:
-		battle_intent.text = "对手意图：普通击打 8 点伤害　·　旋球扰乱可将其降为 4 点"
+		battle_intent.text = "⚠ 顾言准备普通击打   ·   预计造成 8 点伤害   ·   旋球扰乱可降低至 4 点"
 	battle_feedback.text = battle_feedback_text
 	battle_end_button.text = "离开牌战" if battle_finished else "结束回合"
 	battle_end_button.disabled = false
@@ -779,10 +892,25 @@ func _refresh_battle_ui() -> void:
 		if index < battle_hand.size():
 			var card_id: String = battle_hand[index]["id"]
 			var card: Dictionary = battle_card_definitions[card_id]
-			button.text = "%s\n\n费用：%d\n%s" % [card["name"], card["cost"], card["description"]]
+			var category := "攻击"
+			var accent := Color("#f87171")
+			match card["type"]:
+				"block":
+					category = "防御"
+					accent = Color("#5eead4")
+				"disrupt":
+					category = "干扰"
+					accent = Color("#c4b5fd")
+			button.text = "%s     %d 能量\n\n%s\n%s" % [category, card["cost"], card["name"], card["description"]]
+			button.add_theme_color_override("font_color", Color("#dbe7f5"))
+			button.add_theme_color_override("font_hover_color", Color.WHITE)
+			button.add_theme_color_override("font_disabled_color", Color("#67748a"))
+			button.add_theme_stylebox_override("normal", _battle_card_style(Color("#202c42"), Color(accent, 0.75)))
+			button.add_theme_stylebox_override("hover", _battle_card_style(Color("#2a3a56"), accent))
+			button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#151f32"), accent))
 			button.disabled = battle_finished or battle_energy < card["cost"]
 		else:
-			button.text = "空牌位"
+			button.text = "待抽取"
 			button.disabled = true
 
 func _material(color: Color, emissive := false) -> StandardMaterial3D:
