@@ -60,14 +60,16 @@ var battle_hand: Array[Dictionary] = []
 var battle_deck: Array[String] = []
 var battle_discard: Array[String] = []
 var battle_type_uses: Dictionary = {}
+var battle_type_bonus: Dictionary = {}
 var battle_feedback_text := ""
-var player_deck: Array[String] = ["forehand", "backhand", "guard", "curve", "forehand", "backhand", "guard", "curve", "forehand", "backhand"]
+var player_deck: Array[String] = ["forehand", "backhand", "guard", "curve", "boost", "forehand", "backhand", "guard", "curve", "boost", "forehand", "backhand"]
 
 var battle_card_definitions := {
 	"forehand": {"name": "正手击打", "type": "damage", "value": 6, "description": "造成 6 点伤害"},
 	"backhand": {"name": "反手快攻", "type": "damage", "value": 4, "description": "造成 4 点伤害"},
 	"guard": {"name": "架拍格挡", "type": "block", "value": 7, "description": "抵挡本回合 7 点伤害"},
-	"curve": {"name": "旋球扰乱", "type": "disrupt", "value": 3, "description": "造成 3 点伤害，并削弱对手本回合攻击"}
+	"curve": {"name": "旋球扰乱", "type": "disrupt", "value": 3, "description": "造成 3 点伤害，并削弱对手本回合攻击"},
+	"boost": {"name": "战术增幅", "type": "buff", "value": 1, "description": "本回合其他牌类各额外可打出 1 张"}
 }
 var money := 120
 var inventory := {
@@ -1028,6 +1030,7 @@ func _start_battle(npc: Node3D) -> void:
 	battle_deck = player_deck.duplicate()
 	battle_discard.clear()
 	battle_type_uses.clear()
+	battle_type_bonus.clear()
 	battle_hand.clear()
 	_draw_battle_cards_to_five()
 	battle_panel.visible = true
@@ -1058,8 +1061,9 @@ func _play_battle_card(index: int) -> void:
 	var card_origin := battle_cards_container.position + battle_card_buttons[index].position
 	var card_type := String(card["type"])
 	var used_count: int = battle_type_uses.get(card_type, 0)
-	if used_count >= BATTLE_CARD_TYPE_LIMIT:
-		battle_feedback_text = "本回合的%s牌已使用，%s牌每回合最多使用 %d 张。" % [_card_category(card_type), _card_category(card_type), BATTLE_CARD_TYPE_LIMIT]
+	var type_limit := _battle_type_limit(card_type)
+	if used_count >= type_limit:
+		battle_feedback_text = "本回合的%s牌已使用，%s牌每回合最多使用 %d 张。" % [_card_category(card_type), _card_category(card_type), type_limit]
 		_refresh_battle_ui()
 		return
 	battle_type_uses[card_type] = used_count + 1
@@ -1074,6 +1078,15 @@ func _play_battle_card(index: int) -> void:
 			battle_opponent_hp = max(0, battle_opponent_hp - card["value"])
 			battle_weakens_opponent = true
 			battle_feedback_text = "你使用「%s」，造成 %d 点伤害并削弱本回合攻击。" % [card["name"], card["value"]]
+		"buff":
+			var boosted_types: Array[String] = []
+			for definition_id in battle_card_definitions:
+				var boosted_type := String(battle_card_definitions[definition_id]["type"])
+				if boosted_type == card_type or boosted_types.has(boosted_type):
+					continue
+				boosted_types.append(boosted_type)
+				battle_type_bonus[boosted_type] = battle_type_bonus.get(boosted_type, 0) + card["value"]
+			battle_feedback_text = "你使用「%s」，本回合其他牌类各额外可打出 %d 张。" % [card["name"], card["value"]]
 		_:
 			battle_feedback_text = "你使用「%s」。" % card["name"]
 	battle_discard.append(card_id)
@@ -1111,6 +1124,7 @@ func _end_battle_turn() -> void:
 		battle_block = 0
 		battle_weakens_opponent = false
 		battle_type_uses.clear()
+		battle_type_bonus.clear()
 		_draw_battle_cards_to_five()
 	_refresh_battle_ui()
 
@@ -1124,6 +1138,7 @@ func _close_battle() -> void:
 	battle_deck.clear()
 	battle_discard.clear()
 	battle_type_uses.clear()
+	battle_type_bonus.clear()
 
 func _refresh_battle_ui() -> void:
 	if battle_panel == null or not battle_panel.visible:
@@ -1156,8 +1171,9 @@ func _refresh_battle_ui() -> void:
 			category_label.text = category.to_upper()
 			category_label.add_theme_color_override("font_color", accent)
 			var limit_label: Label = widgets["limit"]
-			limit_label.text = "%d / %d" % [used_count, BATTLE_CARD_TYPE_LIMIT]
-			limit_label.add_theme_color_override("font_color", accent if used_count == 0 else Color("#64748b"))
+			var type_limit := _battle_type_limit(card_type)
+			limit_label.text = "%d / %d" % [used_count, type_limit]
+			limit_label.add_theme_color_override("font_color", accent if used_count < type_limit else Color("#64748b"))
 			var name_label: Label = widgets["name"]
 			name_label.text = card["name"]
 			var art_panel: Panel = widgets["art"]
@@ -1174,7 +1190,7 @@ func _refresh_battle_ui() -> void:
 			button.add_theme_stylebox_override("normal", _battle_card_style(Color("#202c42"), Color(accent, 0.75)))
 			button.add_theme_stylebox_override("hover", _battle_card_style(Color("#2a3a56"), accent))
 			button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#151f32"), accent))
-			button.disabled = battle_finished or used_count >= BATTLE_CARD_TYPE_LIMIT
+			button.disabled = battle_finished or used_count >= type_limit
 			button.modulate = Color("#64748b") if button.disabled else Color.WHITE
 		else:
 			var empty_widgets: Dictionary = battle_card_widgets[index]
@@ -1207,8 +1223,11 @@ func _battle_type_limit_summary() -> String:
 			type_order.append(card_type)
 	var summary: Array[String] = []
 	for card_type in type_order:
-		summary.append("%s %d/%d" % [_card_category(card_type), battle_type_uses.get(card_type, 0), BATTLE_CARD_TYPE_LIMIT])
+		summary.append("%s %d/%d" % [_card_category(card_type), battle_type_uses.get(card_type, 0), _battle_type_limit(card_type)])
 	return "  ·  ".join(summary)
+
+func _battle_type_limit(card_type: String) -> int:
+	return BATTLE_CARD_TYPE_LIMIT + int(battle_type_bonus.get(card_type, 0))
 
 func _card_category(card_type: String) -> String:
 	match card_type:
@@ -1218,6 +1237,8 @@ func _card_category(card_type: String) -> String:
 			return "防御"
 		"disrupt":
 			return "干扰"
+		"buff":
+			return "增益"
 		_:
 			return card_type
 
@@ -1229,6 +1250,8 @@ func _card_accent(card_type: String) -> Color:
 			return Color("#5eead4")
 		"disrupt":
 			return Color("#c4b5fd")
+		"buff":
+			return Color("#fbbf24")
 		_:
 			return Color("#fbbf24")
 
@@ -1240,6 +1263,8 @@ func _card_symbol(card_type: String) -> String:
 			return "◇"
 		"disrupt":
 			return "✦"
+		"buff":
+			return "✧"
 		_:
 			return "•"
 

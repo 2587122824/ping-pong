@@ -20,6 +20,9 @@ func _run() -> void:
 	assert(game.battle_hand.size() == 5, "A battle should start with five cards")
 	assert(game.battle_card_widgets.size() == 5, "The battle should create five structured card faces")
 	assert(game.battle_animation_layer != null, "The battle should create a card animation layer")
+	game.battle_hand.clear()
+	for test_card in ["forehand", "backhand", "guard", "curve", "boost"]:
+		game.battle_hand.append({"id": test_card})
 
 	var forehand_index := _find_card(game, "forehand")
 	assert(forehand_index >= 0, "The opening hand should contain a forehand card")
@@ -47,10 +50,25 @@ func _run() -> void:
 	focus_index = _find_card(game, "focus")
 	game._play_battle_card(focus_index)
 	assert(game.battle_hand.size() == 4, "The second card of a newly added type should remain in hand")
+	game.battle_hand.append({"id": "boost"})
+	var boost_index := _find_card(game, "boost")
+	game._play_battle_card(boost_index)
+	assert(game.battle_type_bonus["damage"] == 1, "Buff should grant one extra play to other card types")
+	assert(game.battle_type_bonus["focus"] == 1, "Buff should also affect newly added card types")
+	assert(game._battle_type_limit("buff") == 1, "Buff should not increase its own type limit")
+	game.battle_hand.append({"id": "focus"})
+	focus_index = _find_card(game, "focus")
+	game._play_battle_card(focus_index)
+	assert(game.battle_type_uses["focus"] == 2, "A buffed card type should allow a second card")
+	game.battle_hand.append({"id": "focus"})
+	focus_index = _find_card(game, "focus")
+	game._play_battle_card(focus_index)
+	assert(game.battle_hand.size() == 5, "A third card should still exceed the buffed type limit")
 	game._end_battle_turn()
 	assert(game.battle_player_hp == 29, "Seven block should reduce an eight damage attack to one")
 	assert(game.battle_turn == 2, "Ending a surviving turn should advance the turn")
 	assert(game.battle_type_uses.is_empty(), "Ending a surviving turn should reset all type limits")
+	assert(game.battle_type_bonus.is_empty(), "Ending a surviving turn should clear temporary buff bonuses")
 	assert(game.battle_hand.size() == 5, "Ending a surviving turn should refill the hand to five")
 
 	game.battle_opponent_hp = 4
@@ -66,7 +84,7 @@ func _run() -> void:
 	game.battle_hand.clear()
 	game.battle_deck.clear()
 	game.battle_discard.clear()
-	for recycled_card in ["forehand", "backhand", "guard", "curve", "forehand"]:
+	for recycled_card in ["forehand", "backhand", "guard", "curve", "boost"]:
 		game.battle_discard.append(recycled_card)
 	game._draw_battle_cards_to_five()
 	assert(game.battle_shuffle_pending, "Recycling the discard pile should request a shuffle animation")
