@@ -12,24 +12,22 @@ func _run() -> void:
 	var gate: Node3D = game.get_node("TransitGate")
 	assert(gate != null, "Transit gate should be present")
 	assert(gate.get_meta("target_scene") == "res://TransitRoom.tscn", "Gate should point to the transit scene")
-	assert(game.gate_panel != null and not game.gate_panel.visible, "Gate panel should start hidden")
+	assert(game.player.global_position.distance_to(gate.get_meta("interaction_position")) < 3.2, "Main scene player should start beside the gate")
 
-	game._open_gate_panel()
-	assert(game.gate_panel.visible, "Opening the gate should show the confirmation panel")
-	game._close_gate_panel()
-	assert(not game.gate_panel.visible, "Closing the gate should hide the confirmation panel")
-
-	game._enter_gate()
+	game._update_nearby_npc()
+	var interact := InputEventKey.new()
+	interact.keycode = KEY_E
+	interact.pressed = true
+	game._unhandled_input(interact)
 	await process_frame
 	assert(current_scene != null and current_scene.name == "TransitRoom", "Entering the gate should change to the transit scene")
 	var transit: Node = current_scene
 	var return_gate: Node3D = transit.get_node("TransitGate")
 	assert(return_gate != null, "Transit scene should also contain a return gate")
 	assert(return_gate.get_meta("target_scene") == "res://Main.tscn", "Return gate should point to the original scene")
-	assert(transit.gate_panel != null and not transit.gate_panel.visible, "Return gate panel should start hidden")
-	transit._open_gate_panel()
-	assert(transit.gate_panel.visible, "Return gate should open the confirmation panel")
-	transit._enter_gate()
+	assert(transit.player.global_position.distance_to(return_gate.get_meta("interaction_position")) < 3.2, "Transit scene player should start beside the return gate")
+	transit._update_nearby_gate()
+	transit._unhandled_input(interact)
 	await process_frame
 	assert(current_scene != null and current_scene.name == "Prototype", "Returning should load the original test area")
 

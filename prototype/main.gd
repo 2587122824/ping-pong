@@ -18,8 +18,6 @@ var shop_title: Label
 var shop_balance: Label
 var shop_feedback: Label
 var shop_rows: VBoxContainer
-var gate_panel: Panel
-var gate_button: Button
 var dialogue_index := 0
 var dialogue_lines: Array[String] = []
 var money := 120
@@ -90,7 +88,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if nearby_gate != null:
 				gate_distance = player.global_position.distance_to(nearby_gate.get_meta("interaction_position"))
 			if gate_distance < npc_distance:
-				_open_gate_panel()
+				_enter_gate()
 			elif nearby_npc != null:
 				_interact_with_npc(nearby_npc)
 		elif event.keycode == KEY_I and not _is_modal_open():
@@ -98,7 +96,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_ESCAPE:
 			_close_dialogue()
 			_close_shop()
-			_close_gate_panel()
 
 func _setup_world() -> void:
 	var environment := WorldEnvironment.new()
@@ -205,7 +202,7 @@ func _setup_gate() -> void:
 func _setup_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
-	player.position = Vector3(0, 1.0, 2.5)
+	player.position = Vector3(5.3, 1.0, -4.5)
 	var body := MeshInstance3D.new()
 	var capsule := CapsuleMesh.new()
 	capsule.height = 1.8
@@ -366,52 +363,6 @@ func _setup_ui() -> void:
 	close_hint.add_theme_color_override("font_color", Color("#a9bfd1"))
 	shop_panel.add_child(close_hint)
 
-	gate_panel = Panel.new()
-	gate_panel.anchor_left = 0.5
-	gate_panel.anchor_top = 0.5
-	gate_panel.anchor_right = 0.5
-	gate_panel.anchor_bottom = 0.5
-	gate_panel.position = Vector2(-250, -145)
-	gate_panel.size = Vector2(500, 290)
-	gate_panel.visible = false
-	var gate_style := StyleBoxFlat.new()
-	gate_style.bg_color = Color(0.025, 0.06, 0.11, 0.97)
-	gate_style.border_color = Color("#35d0d0")
-	gate_style.set_border_width_all(2)
-	gate_style.set_corner_radius_all(10)
-	gate_panel.add_theme_stylebox_override("panel", gate_style)
-	layer.add_child(gate_panel)
-
-	var gate_title := Label.new()
-	gate_title.position = Vector2(28, 24)
-	gate_title.size = Vector2(444, 38)
-	gate_title.text = "区域传送门"
-	gate_title.add_theme_font_size_override("font_size", 28)
-	gate_title.add_theme_color_override("font_color", Color("#5eead4"))
-	gate_panel.add_child(gate_title)
-
-	var gate_description := Label.new()
-	gate_description.position = Vector2(28, 76)
-	gate_description.size = Vector2(444, 62)
-	gate_description.text = "门后连接着测试区的中转庭院。要进入吗？"
-	gate_description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	gate_description.add_theme_font_size_override("font_size", 19)
-	gate_description.add_theme_color_override("font_color", Color("#edf7ff"))
-	gate_panel.add_child(gate_description)
-
-	gate_button = Button.new()
-	gate_button.position = Vector2(28, 164)
-	gate_button.size = Vector2(444, 48)
-	gate_button.text = "进入中转庭院"
-	gate_button.pressed.connect(_enter_gate)
-	gate_panel.add_child(gate_button)
-
-	var gate_cancel := Button.new()
-	gate_cancel.position = Vector2(28, 222)
-	gate_cancel.size = Vector2(444, 40)
-	gate_cancel.text = "取消  [Esc]"
-	gate_cancel.pressed.connect(_close_gate_panel)
-	gate_panel.add_child(gate_cancel)
 	_refresh_economy_hud()
 
 func _move_player(_delta: float) -> void:
@@ -467,7 +418,7 @@ func _update_nearby_npc() -> void:
 	if nearby_gate != null:
 		current_gate_distance = player.global_position.distance_to(nearby_gate.get_meta("interaction_position"))
 	if nearby_gate != null and current_gate_distance < npc_distance:
-		interaction_hint.text = "区域传送门 · 按 E 查看目的地"
+		interaction_hint.text = "区域传送门 · 按 E 传送至中转庭院"
 	elif nearby_npc != null:
 		if nearby_npc.get_meta("npc_type", "dialogue") == "merchant":
 			interaction_hint.text = "与 %s 交易 · 按 E 打开商店" % nearby_npc.name
@@ -502,23 +453,12 @@ func _close_dialogue() -> void:
 	dialogue_panel.visible = false
 
 func _is_modal_open() -> bool:
-	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (gate_panel != null and gate_panel.visible)
-
-func _open_gate_panel() -> void:
-	_close_dialogue()
-	_close_shop()
-	gate_panel.visible = true
-	gate_button.grab_focus()
-
-func _close_gate_panel() -> void:
-	if gate_panel != null:
-		gate_panel.visible = false
+	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible)
 
 func _enter_gate() -> void:
 	var error := get_tree().change_scene_to_file("res://TransitRoom.tscn")
 	if error != OK:
 		interaction_hint.text = "无法载入目的地：%s" % error
-		_close_gate_panel()
 
 func _toggle_inventory() -> void:
 	economy_hud.visible = not economy_hud.visible
