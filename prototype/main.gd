@@ -13,6 +13,16 @@ var dialogue_text: Label
 var interaction_hint: Label
 var economy_hud: Panel
 var economy_text: Label
+var deck_view_button: Button
+var deck_view_panel: Panel
+var deck_view_title: Label
+var deck_view_summary: Label
+var deck_view_rows: VBoxContainer
+var codex_button: Button
+var codex_panel: Panel
+var codex_title: Label
+var codex_summary: Label
+var codex_rows: VBoxContainer
 var shop_panel: Panel
 var shop_title: Label
 var shop_balance: Label
@@ -46,6 +56,7 @@ var battle_hand: Array[Dictionary] = []
 var battle_deck: Array[String] = []
 var battle_discard: Array[String] = []
 var battle_feedback_text := ""
+var player_deck: Array[String] = ["forehand", "backhand", "guard", "curve", "forehand", "backhand", "guard", "curve", "forehand", "backhand"]
 
 var battle_card_definitions := {
 	"forehand": {"name": "正手击打", "cost": 1, "type": "damage", "value": 6, "description": "造成 6 点伤害"},
@@ -137,6 +148,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_ESCAPE:
 			if battle_panel != null and battle_panel.visible:
 				_close_battle()
+			elif deck_view_panel != null and deck_view_panel.visible:
+				deck_view_panel.visible = false
+			elif codex_panel != null and codex_panel.visible:
+				codex_panel.visible = false
 			else:
 				_close_dialogue()
 				_close_shop()
@@ -338,7 +353,7 @@ func _setup_ui() -> void:
 
 	economy_hud = Panel.new()
 	economy_hud.position = Vector2(930, 32)
-	economy_hud.size = Vector2(310, 210)
+	economy_hud.size = Vector2(310, 260)
 	var hud_style := StyleBoxFlat.new()
 	hud_style.bg_color = Color(0.025, 0.06, 0.11, 0.88)
 	hud_style.border_color = Color("#47718c")
@@ -349,10 +364,25 @@ func _setup_ui() -> void:
 
 	economy_text = Label.new()
 	economy_text.position = Vector2(18, 14)
-	economy_text.size = Vector2(270, 180)
+	economy_text.size = Vector2(274, 174)
 	economy_text.add_theme_font_size_override("font_size", 19)
 	economy_text.add_theme_color_override("font_color", Color("#edf7ff"))
 	economy_hud.add_child(economy_text)
+
+	deck_view_button = Button.new()
+	deck_view_button.position = Vector2(18, 196)
+	deck_view_button.size = Vector2(130, 40)
+	deck_view_button.text = "牌组"
+	deck_view_button.add_theme_font_size_override("font_size", 16)
+	deck_view_button.pressed.connect(_open_deck_view)
+	economy_hud.add_child(deck_view_button)
+	codex_button = Button.new()
+	codex_button.position = Vector2(162, 196)
+	codex_button.size = Vector2(130, 40)
+	codex_button.text = "卡牌图鉴"
+	codex_button.add_theme_font_size_override("font_size", 16)
+	codex_button.pressed.connect(_open_codex)
+	economy_hud.add_child(codex_button)
 
 	shop_panel = Panel.new()
 	shop_panel.position = Vector2(60, 290)
@@ -406,9 +436,171 @@ func _setup_ui() -> void:
 	close_hint.add_theme_font_size_override("font_size", 18)
 	close_hint.add_theme_color_override("font_color", Color("#a9bfd1"))
 	shop_panel.add_child(close_hint)
+	_setup_deck_and_codex_ui(layer)
 	_setup_battle_ui(layer)
 
 	_refresh_economy_hud()
+
+func _setup_deck_and_codex_ui(layer: CanvasLayer) -> void:
+	deck_view_panel = _make_collection_panel(Vector2(290, 94), Vector2(700, 532), Color("#35d0c2"))
+	deck_view_panel.visible = false
+	layer.add_child(deck_view_panel)
+	deck_view_title = _make_collection_title("当前牌组", Color("#99f6e4"))
+	deck_view_panel.add_child(deck_view_title)
+	deck_view_summary = Label.new()
+	deck_view_summary.position = Vector2(30, 62)
+	deck_view_summary.size = Vector2(640, 32)
+	deck_view_summary.add_theme_font_size_override("font_size", 17)
+	deck_view_summary.add_theme_color_override("font_color", Color("#c5d4e5"))
+	deck_view_panel.add_child(deck_view_summary)
+	deck_view_rows = VBoxContainer.new()
+	deck_view_rows.position = Vector2(30, 112)
+	deck_view_rows.size = Vector2(640, 330)
+	deck_view_rows.add_theme_constant_override("separation", 10)
+	deck_view_panel.add_child(deck_view_rows)
+	var deck_close := _make_collection_close_button()
+	deck_close.pressed.connect(func(): deck_view_panel.visible = false)
+	deck_view_panel.add_child(deck_close)
+
+	codex_panel = _make_collection_panel(Vector2(290, 94), Vector2(700, 532), Color("#a78bfa"))
+	codex_panel.visible = false
+	layer.add_child(codex_panel)
+	codex_title = _make_collection_title("卡牌图鉴", Color("#ddd6fe"))
+	codex_panel.add_child(codex_title)
+	codex_summary = Label.new()
+	codex_summary.position = Vector2(30, 62)
+	codex_summary.size = Vector2(640, 32)
+	codex_summary.add_theme_font_size_override("font_size", 17)
+	codex_summary.add_theme_color_override("font_color", Color("#c5d4e5"))
+	codex_panel.add_child(codex_summary)
+	codex_rows = VBoxContainer.new()
+	codex_rows.position = Vector2(30, 112)
+	codex_rows.size = Vector2(640, 330)
+	codex_rows.add_theme_constant_override("separation", 10)
+	codex_panel.add_child(codex_rows)
+	var codex_close := _make_collection_close_button()
+	codex_close.pressed.connect(func(): codex_panel.visible = false)
+	codex_panel.add_child(codex_close)
+
+	_refresh_deck_view()
+	_refresh_codex()
+
+func _make_collection_panel(position: Vector2, size: Vector2, accent: Color) -> Panel:
+	var panel := Panel.new()
+	panel.position = position
+	panel.size = size
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#0b1020")
+	style.border_color = accent
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(14)
+	panel.add_theme_stylebox_override("panel", style)
+	return panel
+
+func _make_collection_title(text: String, color: Color) -> Label:
+	var title := Label.new()
+	title.position = Vector2(30, 22)
+	title.size = Vector2(620, 32)
+	title.text = text
+	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_color_override("font_color", color)
+	return title
+
+func _make_collection_close_button() -> Button:
+	var button := Button.new()
+	button.position = Vector2(510, 464)
+	button.size = Vector2(160, 42)
+	button.text = "关闭  [Esc]"
+	button.add_theme_font_size_override("font_size", 16)
+	return button
+
+func _open_deck_view() -> void:
+	if _is_modal_open():
+		return
+	_refresh_deck_view()
+	deck_view_panel.visible = true
+
+func _open_codex() -> void:
+	if _is_modal_open():
+		return
+	_refresh_codex()
+	codex_panel.visible = true
+
+func _refresh_deck_view() -> void:
+	if deck_view_rows == null:
+		return
+	_clear_collection_rows(deck_view_rows)
+	deck_view_summary.text = "共 %d 张卡牌  ·  固定测试牌组" % player_deck.size()
+	for card_id in battle_card_definitions:
+		var count: int = player_deck.count(card_id)
+		if count <= 0:
+			continue
+		deck_view_rows.add_child(_make_collection_card_row(card_id, "%d 张" % count))
+
+func _refresh_codex() -> void:
+	if codex_rows == null:
+		return
+	_clear_collection_rows(codex_rows)
+	codex_summary.text = "已收录 %d / %d 种卡牌" % [battle_card_definitions.size(), battle_card_definitions.size()]
+	for card_id in battle_card_definitions:
+		var count: int = player_deck.count(card_id)
+		var ownership := "牌组 ×%d" % count if count > 0 else "尚未加入牌组"
+		codex_rows.add_child(_make_collection_card_row(card_id, ownership))
+
+func _clear_collection_rows(rows: VBoxContainer) -> void:
+	for child in rows.get_children():
+		rows.remove_child(child)
+		child.queue_free()
+
+func _make_collection_card_row(card_id: String, trailing_text: String) -> Panel:
+	var card: Dictionary = battle_card_definitions[card_id]
+	var category := "攻击"
+	var accent := Color("#f87171")
+	match card["type"]:
+		"block":
+			category = "防御"
+			accent = Color("#5eead4")
+		"disrupt":
+			category = "干扰"
+			accent = Color("#c4b5fd")
+	var row := Panel.new()
+	row.custom_minimum_size = Vector2(640, 72)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#151e30")
+	style.border_color = Color(accent, 0.7)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	row.add_theme_stylebox_override("panel", style)
+	var category_label := Label.new()
+	category_label.position = Vector2(14, 12)
+	category_label.size = Vector2(74, 24)
+	category_label.text = category
+	category_label.add_theme_font_size_override("font_size", 15)
+	category_label.add_theme_color_override("font_color", accent)
+	row.add_child(category_label)
+	var name_label := Label.new()
+	name_label.position = Vector2(98, 8)
+	name_label.size = Vector2(270, 26)
+	name_label.text = "%s  ·  %d 能量" % [card["name"], card["cost"]]
+	name_label.add_theme_font_size_override("font_size", 17)
+	name_label.add_theme_color_override("font_color", Color("#f1f5f9"))
+	row.add_child(name_label)
+	var description := Label.new()
+	description.position = Vector2(98, 38)
+	description.size = Vector2(420, 22)
+	description.text = card["description"]
+	description.add_theme_font_size_override("font_size", 14)
+	description.add_theme_color_override("font_color", Color("#aebbd0"))
+	row.add_child(description)
+	var trailing := Label.new()
+	trailing.position = Vector2(510, 20)
+	trailing.size = Vector2(112, 24)
+	trailing.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	trailing.text = trailing_text
+	trailing.add_theme_font_size_override("font_size", 15)
+	trailing.add_theme_color_override("font_color", Color("#d4dced"))
+	row.add_child(trailing)
+	return row
 
 func _setup_battle_ui(layer: CanvasLayer) -> void:
 	battle_panel = Panel.new()
@@ -679,7 +871,7 @@ func _close_dialogue() -> void:
 	dialogue_panel.visible = false
 
 func _is_modal_open() -> bool:
-	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible)
+	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible)
 
 func _enter_gate() -> void:
 	var error := get_tree().change_scene_to_file("res://TransitRoom.tscn")
@@ -687,6 +879,9 @@ func _enter_gate() -> void:
 		interaction_hint.text = "无法载入目的地：%s" % error
 
 func _toggle_inventory() -> void:
+	if economy_hud.visible:
+		deck_view_panel.visible = false
+		codex_panel.visible = false
 	economy_hud.visible = not economy_hud.visible
 
 func _open_shop(npc: Node3D) -> void:
@@ -780,7 +975,7 @@ func _start_battle(npc: Node3D) -> void:
 	battle_finished = false
 	battle_won = false
 	battle_feedback_text = "牌战开始。先读出对手意图，再决定出牌或结束回合。"
-	battle_deck = ["forehand", "backhand", "guard", "curve", "forehand", "backhand", "guard", "curve", "forehand", "backhand"]
+	battle_deck = player_deck.duplicate()
 	battle_discard.clear()
 	battle_hand.clear()
 	_draw_battle_cards_to_three()
