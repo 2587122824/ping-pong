@@ -248,7 +248,9 @@ func _update_nearby_npc() -> void:
 func _open_or_advance_dialogue(npc: Node3D) -> void:
 	var data: Dictionary = npc.get_meta("dialogue_data")
 	if not dialogue_panel.visible:
-		dialogue_lines = data["lines"]
+		dialogue_lines.clear()
+		for line in data["lines"]:
+			dialogue_lines.append(str(line))
 		dialogue_index = 0
 		dialogue_panel.visible = true
 		dialogue_title.text = "%s  ·  %s" % [data["name"], data["role"]]
