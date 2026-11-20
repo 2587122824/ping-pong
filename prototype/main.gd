@@ -2,9 +2,9 @@ extends Node3D
 
 const PLAYER_SPEED := 5.0
 const INTERACTION_DISTANCE := 3.2
-const BATTLE_CARD_TYPE_LIMIT := 1
 const PLAYER_MAX_HP := 30
-const PLAYER_MAX_STAMINA := 10
+const PLAYER_MAX_STAMINA := 100
+const BATTLE_STAMINA_PER_TURN := 20
 const XP_PER_LEVEL := 100
 const BATTLE_VICTORY_XP := 25
 const EQUIPMENT_SLOT_NAMES := {"weapon": "武器", "clothes": "衣服", "shoes": "鞋子", "hat": "帽子"}
@@ -46,6 +46,7 @@ var deck_view_panel: Panel
 var deck_view_title: Label
 var deck_view_summary: Label
 var deck_view_rows: VBoxContainer
+var deck_theme_buttons: Dictionary = {}
 var codex_button: Button
 var codex_panel: Panel
 var codex_title: Label
@@ -95,22 +96,39 @@ var battle_won := false
 var battle_hand: Array[Dictionary] = []
 var battle_deck: Array[String] = []
 var battle_discard: Array[String] = []
-var battle_category_uses: Dictionary = {}
 var battle_next_action_damage_bonus := 0
 var battle_feedback_text := ""
-var player_deck: Array[String] = ["forehand", "backhand", "guard", "curve", "boost", "recycle", "forehand", "backhand", "guard", "curve", "boost", "recycle", "forehand", "backhand"]
+var active_deck_id := "table_tennis"
+var battle_decks := {
+	"table_tennis": {"name": "乒乓球 · 近台快攻", "cards": ["tt_main", "tt_sub", "tt_control", "tt_defense", "tt_resource", "tt_tactic"]},
+	"badminton": {"name": "羽毛球 · 杀上网", "cards": ["bad_main", "bad_sub", "bad_control", "bad_defense", "bad_resource", "bad_tactic"]},
+	"tennis": {"name": "网球 · 底线相持", "cards": ["ten_main", "ten_sub", "ten_control", "ten_defense", "ten_resource", "ten_tactic"]}
+}
+var player_deck: Array[String] = ["tt_main", "tt_sub", "tt_control", "tt_defense", "tt_resource", "tt_tactic"]
 
 var battle_card_definitions := {
-	"forehand": {"name": "正手击打", "type": "action", "effect": "damage", "value": 6, "description": "基础伤害 6，额外加武器攻击值"},
-	"backhand": {"name": "反手快攻", "type": "action", "effect": "damage", "value": 4, "description": "基础伤害 4，额外加武器攻击值"},
-	"guard": {"name": "架拍格挡", "type": "defense", "effect": "block", "value": 7, "description": "抵挡本回合 7 点伤害"},
-	"curve": {"name": "旋球扰乱", "type": "action", "effect": "disrupt", "value": 3, "description": "基础伤害 3 + 武器攻击值，并削弱对手本回合攻击"},
-	"boost": {"name": "战术增幅", "type": "tactic", "effect": "next_action_bonus", "value": 3, "description": "强化下一张行动牌，使其伤害 +3"},
-	"recycle": {"name": "数据回收", "type": "resource", "effect": "draw", "value": 1, "description": "抽 1 张牌，补充手牌选择"}
+	"tt_main": {"name": "正手冲球", "type": "action", "effect": "damage", "cost": 15, "value": 4, "description": "武器基础伤害 +4 招式伤害"},
+	"tt_sub": {"name": "反手拧拉", "type": "action", "effect": "damage", "cost": 10, "value": 2, "description": "武器基础伤害 +2 招式伤害"},
+	"tt_control": {"name": "侧身暴冲", "type": "action", "effect": "disrupt", "cost": 15, "value": 1, "description": "武器基础伤害 +1，并使敌方本回合攻击减半"},
+	"tt_defense": {"name": "削球", "type": "defense", "effect": "block", "cost": 10, "value": 7, "description": "获得 7 点格挡"},
+	"tt_resource": {"name": "摆短", "type": "resource", "effect": "draw", "cost": 5, "value": 1, "description": "抽 1 张牌"},
+	"tt_tactic": {"name": "霸王拧", "type": "tactic", "effect": "next_action_bonus", "cost": 5, "value": 3, "description": "下一张行动牌伤害 +3"},
+	"bad_main": {"name": "重杀", "type": "action", "effect": "damage", "cost": 15, "value": 4, "description": "武器基础伤害 +4 招式伤害"},
+	"bad_sub": {"name": "劈吊", "type": "action", "effect": "damage", "cost": 10, "value": 2, "description": "武器基础伤害 +2 招式伤害"},
+	"bad_control": {"name": "平抽挡", "type": "action", "effect": "disrupt", "cost": 15, "value": 1, "description": "武器基础伤害 +1，并使敌方本回合攻击减半"},
+	"bad_defense": {"name": "挡网", "type": "defense", "effect": "block", "cost": 10, "value": 7, "description": "获得 7 点格挡"},
+	"bad_resource": {"name": "搓球", "type": "resource", "effect": "draw", "cost": 5, "value": 1, "description": "抽 1 张牌"},
+	"bad_tactic": {"name": "起跳杀", "type": "tactic", "effect": "next_action_bonus", "cost": 5, "value": 3, "description": "下一张行动牌伤害 +3"},
+	"ten_main": {"name": "正手平击", "type": "action", "effect": "damage", "cost": 15, "value": 4, "description": "武器基础伤害 +4 招式伤害"},
+	"ten_sub": {"name": "双手反拍", "type": "action", "effect": "damage", "cost": 10, "value": 2, "description": "武器基础伤害 +2 招式伤害"},
+	"ten_control": {"name": "放短球", "type": "action", "effect": "disrupt", "cost": 15, "value": 1, "description": "武器基础伤害 +1，并使敌方本回合攻击减半"},
+	"ten_defense": {"name": "切削球", "type": "defense", "effect": "block", "cost": 10, "value": 7, "description": "获得 7 点格挡"},
+	"ten_resource": {"name": "挑高球", "type": "resource", "effect": "draw", "cost": 5, "value": 1, "description": "抽 1 张牌"},
+	"ten_tactic": {"name": "高压球", "type": "tactic", "effect": "next_action_bonus", "cost": 5, "value": 3, "description": "下一张行动牌伤害 +3"}
 }
 var equipment_slots := {"weapon": "starter_racket", "clothes": "", "shoes": "", "hat": ""}
 var equipment_definitions := {
-	"starter_racket": {"name": "训练球拍", "slot": "weapon", "attack": 2, "description": "主角的基础武器。攻击行动牌额外造成 2 点伤害。"}
+	"starter_racket": {"name": "训练球拍", "slot": "weapon", "base_damage": 4, "description": "主角的基础武器，提供 4 点基础伤害。"}
 }
 var talent_order: Array[String] = ["racket_calibration", "read_intent", "field_routine", "tactical_memory"]
 var talent_definitions := {
@@ -684,9 +702,20 @@ func _setup_deck_and_codex_ui(layer: CanvasLayer) -> void:
 	deck_view_summary.add_theme_font_size_override("font_size", 17)
 	deck_view_summary.add_theme_color_override("font_color", Color("#c5d4e5"))
 	deck_view_panel.add_child(deck_view_summary)
+	var theme_options := ["table_tennis", "badminton", "tennis"]
+	var theme_labels := ["乒乓球", "羽毛球", "网球"]
+	for index in range(theme_options.size()):
+		var deck_id: String = theme_options[index]
+		var theme_button := Button.new()
+		theme_button.position = Vector2(30 + index * 208, 100)
+		theme_button.size = Vector2(196, 38)
+		theme_button.text = theme_labels[index]
+		theme_button.pressed.connect(_select_deck.bind(deck_id))
+		deck_view_panel.add_child(theme_button)
+		deck_theme_buttons[deck_id] = theme_button
 	deck_view_rows = VBoxContainer.new()
-	deck_view_rows.position = Vector2(30, 112)
-	deck_view_rows.size = Vector2(640, 330)
+	deck_view_rows.position = Vector2(30, 148)
+	deck_view_rows.size = Vector2(640, 294)
 	deck_view_rows.add_theme_constant_override("separation", 10)
 	deck_view_panel.add_child(deck_view_rows)
 	var deck_close := _make_collection_close_button()
@@ -769,8 +798,8 @@ func _open_equipment() -> void:
 func _refresh_equipment_ui() -> void:
 	if equipment_summary == null:
 		return
-	var weapon_attack := _get_weapon_attack()
-	equipment_summary.text = "当前武器攻击 +%d  ·  攻击牌伤害 = 卡牌基础伤害 + 武器攻击" % weapon_attack
+	var weapon_base_damage := _get_weapon_base_damage()
+	equipment_summary.text = "当前武器基础伤害 %d  ·  攻击牌伤害 = 武器基础 + 招式加成" % weapon_base_damage
 	for slot_id in EQUIPMENT_SLOT_NAMES:
 		var item_id: String = equipment_slots.get(slot_id, "")
 		var item_label: Label = equipment_slot_widgets[slot_id]
@@ -781,15 +810,15 @@ func _refresh_equipment_ui() -> void:
 		var item: Dictionary = equipment_definitions[item_id]
 		var item_text := String(item["name"])
 		if slot_id == "weapon":
-			item_text += "    攻击 +%d" % int(item.get("attack", 0))
+			item_text += "    基础伤害 %d" % int(item.get("base_damage", 0))
 		item_label.text = item_text
 		item_label.add_theme_color_override("font_color", Color("#f1f5f9"))
 
-func _get_weapon_attack() -> int:
+func _get_weapon_base_damage() -> int:
 	var weapon_id: String = equipment_slots.get("weapon", "")
 	if weapon_id.is_empty() or not equipment_definitions.has(weapon_id):
 		return 0
-	return int(equipment_definitions[weapon_id].get("attack", 0))
+	return int(equipment_definitions[weapon_id].get("base_damage", 0))
 
 func _setup_talent_ui(layer: CanvasLayer) -> void:
 	talent_panel = _make_collection_panel(Vector2(245, 70), Vector2(760, 560), Color("#8b9cf6"))
@@ -924,7 +953,7 @@ func _get_talent_bonus(effect: String) -> int:
 func _card_display_description(card: Dictionary) -> String:
 	var effect := String(card.get("effect", ""))
 	if String(card.get("type", "")) == "action" and effect in ["damage", "disrupt"]:
-		return "%s  ·  武器 +%d / 天赋 +%d" % [card["description"], _get_weapon_attack(), _get_talent_bonus("action_damage_bonus")]
+		return "%s  ·  总伤害 %d" % [card["description"], _get_weapon_base_damage() + int(card["value"]) + _get_talent_bonus("action_damage_bonus")]
 	return String(card["description"])
 
 func _make_collection_panel(position: Vector2, size: Vector2, accent: Color) -> Panel:
@@ -972,12 +1001,24 @@ func _refresh_deck_view() -> void:
 	if deck_view_rows == null:
 		return
 	_clear_collection_rows(deck_view_rows)
-	deck_view_summary.text = "共 %d 张卡牌  ·  固定测试牌组" % player_deck.size()
+	deck_view_summary.text = "%s  ·  共 %d 张" % [battle_decks[active_deck_id]["name"], player_deck.size()]
+	for deck_id in deck_theme_buttons:
+		var theme_button: Button = deck_theme_buttons[deck_id]
+		theme_button.disabled = deck_id == active_deck_id
 	for card_id in battle_card_definitions:
 		var count: int = player_deck.count(card_id)
 		if count <= 0:
 			continue
 		deck_view_rows.add_child(_make_collection_card_row(card_id, "%d 张" % count))
+
+func _select_deck(deck_id: String) -> void:
+	if not battle_decks.has(deck_id):
+		return
+	active_deck_id = deck_id
+	player_deck.clear()
+	for card_id in battle_decks[deck_id]["cards"]:
+		player_deck.append(String(card_id))
+	_refresh_deck_view()
 
 func _refresh_codex() -> void:
 	if codex_rows == null:
@@ -1016,7 +1057,7 @@ func _make_collection_card_row(card_id: String, trailing_text: String) -> Panel:
 	var name_label := Label.new()
 	name_label.position = Vector2(98, 8)
 	name_label.size = Vector2(270, 26)
-	name_label.text = "%s  ·  每回合限 %d 张" % [card["name"], BATTLE_CARD_TYPE_LIMIT]
+	name_label.text = "%s  ·  费用 %d" % [card["name"], int(card["cost"])]
 	name_label.add_theme_font_size_override("font_size", 17)
 	name_label.add_theme_color_override("font_color", Color("#f1f5f9"))
 	row.add_child(name_label)
@@ -1531,6 +1572,7 @@ func _start_battle(npc: Node3D) -> void:
 	_close_shop()
 	battle_opponent = npc
 	battle_opponent_hp = 30
+	player_stamina = PLAYER_MAX_STAMINA
 	battle_block = _get_talent_bonus("start_block")
 	battle_turn = 1
 	battle_weakens_opponent = false
@@ -1539,7 +1581,6 @@ func _start_battle(npc: Node3D) -> void:
 	battle_feedback_text = "牌战开始。先读出对手意图，再决定出牌或结束回合。"
 	battle_deck = player_deck.duplicate()
 	battle_discard.clear()
-	battle_category_uses.clear()
 	battle_next_action_damage_bonus = 0
 	battle_hand.clear()
 	_draw_battle_cards_to_five()
@@ -1580,20 +1621,18 @@ func _play_battle_card(index: int) -> void:
 	var card: Dictionary = battle_card_definitions[card_id]
 	var card_origin := battle_cards_container.position + battle_card_buttons[index].position
 	var card_type := String(card["type"])
-	var used_count: int = battle_category_uses.get(card_type, 0)
-	var type_limit := BATTLE_CARD_TYPE_LIMIT
-	if used_count >= type_limit:
-		battle_feedback_text = "本回合的%s牌已使用，每类牌每回合最多使用 %d 张。" % [_card_category(card_type), type_limit]
+	var card_cost := int(card.get("cost", 0))
+	if card_cost > player_stamina:
+		battle_feedback_text = "体力不足：打出「%s」需要 %d 点体力，当前只有 %d 点。" % [card["name"], card_cost, player_stamina]
 		_refresh_battle_ui()
 		return
-	battle_category_uses[card_type] = used_count + 1
+	player_stamina -= card_cost
 	var effect := String(card.get("effect", card_type))
 	battle_hand.remove_at(index)
 	match card_type:
 		"action":
-			var action_value: int = card["value"]
+			var action_value: int = _get_weapon_base_damage() + int(card["value"])
 			if effect in ["damage", "disrupt"]:
-				action_value += _get_weapon_attack()
 				action_value += _get_talent_bonus("action_damage_bonus")
 			action_value += battle_next_action_damage_bonus
 			battle_next_action_damage_bonus = 0
@@ -1650,10 +1689,13 @@ func _end_battle_turn() -> void:
 		battle_feedback_text = "你输掉了牌战。调整出牌节奏后再来挑战。"
 	else:
 		battle_turn += 1
+		player_stamina = min(PLAYER_MAX_STAMINA, player_stamina + BATTLE_STAMINA_PER_TURN)
 		battle_block = 0
 		battle_weakens_opponent = false
-		battle_category_uses.clear()
 		battle_next_action_damage_bonus = 0
+		for played_card in battle_hand:
+			battle_discard.append(String(played_card["id"]))
+		battle_hand.clear()
 		_draw_battle_cards_to_five()
 	_refresh_battle_ui()
 
@@ -1666,7 +1708,6 @@ func _close_battle() -> void:
 	battle_hand.clear()
 	battle_deck.clear()
 	battle_discard.clear()
-	battle_category_uses.clear()
 	battle_next_action_damage_bonus = 0
 
 func _refresh_battle_ui() -> void:
@@ -1682,12 +1723,12 @@ func _refresh_battle_ui() -> void:
 	battle_xp_text.text = "%d / %d" % [player_xp, XP_PER_LEVEL]
 	battle_xp_bar.value = player_xp
 	_refresh_player_status_hud()
-	battle_status.text = "本回合牌类额度  %s     格挡  %d" % [_battle_type_limit_summary(), battle_block]
+	battle_status.text = "体力预算  %d / %d     格挡  %d" % [player_stamina, PLAYER_MAX_STAMINA, battle_block]
 	battle_deck_label.text = "你的手牌     %d / 5 张  ·  牌库 %d  ·  弃牌 %d" % [battle_hand.size(), battle_deck.size(), battle_discard.size()]
 	if battle_finished:
 		battle_intent.text = "牌战结束 · %s" % ("胜利" if battle_won else "失败")
 	else:
-		battle_intent.text = "⚠ 顾言准备普通击打   ·   预计造成 8 点伤害   ·   旋球扰乱可降低至 4 点"
+		battle_intent.text = "⚠ 顾言准备普通击打   ·   预计造成 8 点伤害   ·   牵制牌可降低至 4 点"
 	battle_feedback.text = battle_feedback_text
 	battle_end_button.text = "离开牌战" if battle_finished else "结束回合"
 	battle_end_button.disabled = false
@@ -1699,15 +1740,14 @@ func _refresh_battle_ui() -> void:
 			var card_type := String(card["type"])
 			var category := _card_category(card_type)
 			var accent := _card_accent(card_type)
-			var used_count: int = battle_category_uses.get(card_type, 0)
+			var card_cost := int(card.get("cost", 0))
 			var widgets: Dictionary = battle_card_widgets[index]
 			var category_label: Label = widgets["category"]
 			category_label.text = category.to_upper()
 			category_label.add_theme_color_override("font_color", accent)
 			var limit_label: Label = widgets["limit"]
-			var type_limit := BATTLE_CARD_TYPE_LIMIT
-			limit_label.text = "%d / %d" % [used_count, type_limit]
-			limit_label.add_theme_color_override("font_color", accent if used_count < type_limit else Color("#64748b"))
+			limit_label.text = "体力 %d" % card_cost
+			limit_label.add_theme_color_override("font_color", accent if card_cost <= player_stamina else Color("#64748b"))
 			var name_label: Label = widgets["name"]
 			name_label.text = card["name"]
 			var art_panel: Panel = widgets["art"]
@@ -1724,7 +1764,7 @@ func _refresh_battle_ui() -> void:
 			button.add_theme_stylebox_override("normal", _battle_card_style(Color("#202c42"), Color(accent, 0.75)))
 			button.add_theme_stylebox_override("hover", _battle_card_style(Color("#2a3a56"), accent))
 			button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#151f32"), accent))
-			button.disabled = battle_finished or used_count >= type_limit
+			button.disabled = battle_finished or card_cost > player_stamina
 			button.modulate = Color("#64748b") if button.disabled else Color.WHITE
 		else:
 			var empty_widgets: Dictionary = battle_card_widgets[index]
@@ -1748,17 +1788,6 @@ func _refresh_battle_ui() -> void:
 			var drawn_indices := battle_pending_draw_indices.duplicate()
 			battle_pending_draw_indices.clear()
 			_animate_draw_cards(drawn_indices)
-
-func _battle_type_limit_summary() -> String:
-	var type_order: Array[String] = []
-	for card_id in battle_card_definitions:
-		var card_type := String(battle_card_definitions[card_id]["type"])
-		if not type_order.has(card_type):
-			type_order.append(card_type)
-	var summary: Array[String] = []
-	for card_type in type_order:
-		summary.append("%s %d/%d" % [_card_category(card_type), battle_category_uses.get(card_type, 0), BATTLE_CARD_TYPE_LIMIT])
-	return "  ·  ".join(summary)
 
 func _card_category(card_type: String) -> String:
 	match card_type:
