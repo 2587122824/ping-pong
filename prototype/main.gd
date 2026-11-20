@@ -3,6 +3,10 @@ extends Node3D
 const PLAYER_SPEED := 5.0
 const INTERACTION_DISTANCE := 3.2
 const BATTLE_CARD_TYPE_LIMIT := 1
+const PLAYER_MAX_HP := 30
+const PLAYER_MAX_MANA := 10
+const XP_PER_LEVEL := 100
+const BATTLE_VICTORY_XP := 25
 
 var player: CharacterBody3D
 var camera: Camera3D
@@ -14,6 +18,18 @@ var dialogue_text: Label
 var interaction_hint: Label
 var economy_hud: Panel
 var economy_text: Label
+var player_status_hud: Panel
+var player_hp_label: Label
+var player_hp_bar: ProgressBar
+var player_mana_label: Label
+var player_mana_bar: ProgressBar
+var player_xp_label: Label
+var player_xp_bar: ProgressBar
+var player_status_3d: Node3D
+var player_status_3d_label: Label3D
+var player_3d_hp_fill: MeshInstance3D
+var player_3d_mana_fill: MeshInstance3D
+var player_3d_xp_fill: MeshInstance3D
 var deck_view_button: Button
 var deck_view_panel: Panel
 var deck_view_title: Label
@@ -39,6 +55,10 @@ var battle_player_hp_bar: ProgressBar
 var battle_opponent_hp_bar: ProgressBar
 var battle_player_hp_text: Label
 var battle_opponent_hp_text: Label
+var battle_mana_bar: ProgressBar
+var battle_mana_text: Label
+var battle_xp_bar: ProgressBar
+var battle_xp_text: Label
 var battle_cards_container: HBoxContainer
 var battle_card_buttons: Array[Button] = []
 var battle_card_widgets: Array[Dictionary] = []
@@ -49,8 +69,11 @@ var battle_end_button: Button
 var battle_opponent: Node3D
 var dialogue_index := 0
 var dialogue_lines: Array[String] = []
-var battle_player_hp := 30
+var battle_player_hp := PLAYER_MAX_HP
 var battle_opponent_hp := 30
+var player_mana := PLAYER_MAX_MANA
+var player_xp := 0
+var player_level := 1
 var battle_block := 0
 var battle_turn := 1
 var battle_weakens_opponent := false
@@ -284,11 +307,57 @@ func _setup_player() -> void:
 	collision.shape = shape
 	player.add_child(collision)
 	add_child(player)
+	_setup_player_status_3d()
 
 	camera = Camera3D.new()
 	camera.current = true
 	camera.fov = 65.0
 	add_child(camera)
+
+func _setup_player_status_3d() -> void:
+	player_status_3d = Node3D.new()
+	player_status_3d.name = "PlayerStatusPanel3D"
+	player_status_3d.position = Vector3(0, 2.35, 0)
+	player.add_child(player_status_3d)
+	var panel := MeshInstance3D.new()
+	var panel_mesh := BoxMesh.new()
+	panel_mesh.size = Vector3(3.55, 1.12, 0.06)
+	panel.mesh = panel_mesh
+	panel.material_override = _material(Color(0.02, 0.05, 0.1, 0.92), true)
+	player_status_3d.add_child(panel)
+	player_status_3d_label = Label3D.new()
+	player_status_3d_label.position = Vector3(0, 0.28, 0.08)
+	player_status_3d_label.font_size = 28
+	player_status_3d_label.outline_size = 8
+	player_status_3d_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	player_status_3d_label.modulate = Color("#e7f5ff")
+	player_status_3d_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	player_status_3d.add_child(player_status_3d_label)
+	player_3d_hp_fill = _make_player_3d_bar(Color("#fb7185"), 0.08)
+	player_3d_hp_fill.position = Vector3(0, 0.06, 0.08)
+	player_status_3d.add_child(player_3d_hp_fill)
+	player_3d_mana_fill = _make_player_3d_bar(Color("#60a5fa"), 0.08)
+	player_3d_mana_fill.position = Vector3(0, -0.16, 0.08)
+	player_status_3d.add_child(player_3d_mana_fill)
+	player_3d_xp_fill = _make_player_3d_bar(Color("#fbbf24"), 0.08)
+	player_3d_xp_fill.position = Vector3(0, -0.38, 0.08)
+	player_status_3d.add_child(player_3d_xp_fill)
+	for row in [0.06, -0.16, -0.38]:
+		var background := MeshInstance3D.new()
+		var background_mesh := BoxMesh.new()
+		background_mesh.size = Vector3(2.9, 0.09, 0.025)
+		background.mesh = background_mesh
+		background.position = Vector3(0, row, 0.045)
+		background.material_override = _material(Color("#182238"), true)
+		player_status_3d.add_child(background)
+
+func _make_player_3d_bar(fill_color: Color, height: float) -> MeshInstance3D:
+	var fill := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(2.9, height, 0.035)
+	fill.mesh = mesh
+	fill.material_override = _material(fill_color, true)
+	return fill
 
 func _setup_npcs() -> void:
 	for data in npcs:
@@ -322,6 +391,7 @@ func _setup_npcs() -> void:
 func _setup_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	_setup_player_status_hud(layer)
 
 	interaction_hint = Label.new()
 	interaction_hint.position = Vector2(40, 40)
@@ -448,6 +518,91 @@ func _setup_ui() -> void:
 	_setup_battle_ui(layer)
 
 	_refresh_economy_hud()
+	_refresh_player_status_hud()
+
+func _setup_player_status_hud(layer: CanvasLayer) -> void:
+	player_status_hud = Panel.new()
+	player_status_hud.position = Vector2(40, 88)
+	player_status_hud.size = Vector2(350, 164)
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.025, 0.06, 0.11, 0.9)
+	panel_style.border_color = Color("#47718c")
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(8)
+	player_status_hud.add_theme_stylebox_override("panel", panel_style)
+	layer.add_child(player_status_hud)
+
+	player_hp_label = _make_status_label(Vector2(16, 10), Vector2(318, 22), Color("#fca5a5"))
+	player_status_hud.add_child(player_hp_label)
+	player_hp_bar = _make_status_bar(PLAYER_MAX_HP, Color("#fb7185"))
+	player_hp_bar.position = Vector2(16, 34)
+	player_hp_bar.size = Vector2(318, 12)
+	player_status_hud.add_child(player_hp_bar)
+
+	player_mana_label = _make_status_label(Vector2(16, 55), Vector2(318, 22), Color("#93c5fd"))
+	player_status_hud.add_child(player_mana_label)
+	player_mana_bar = _make_status_bar(PLAYER_MAX_MANA, Color("#60a5fa"))
+	player_mana_bar.position = Vector2(16, 79)
+	player_mana_bar.size = Vector2(318, 12)
+	player_status_hud.add_child(player_mana_bar)
+
+	player_xp_label = _make_status_label(Vector2(16, 100), Vector2(318, 22), Color("#fde68a"))
+	player_status_hud.add_child(player_xp_label)
+	player_xp_bar = _make_status_bar(XP_PER_LEVEL, Color("#fbbf24"))
+	player_xp_bar.position = Vector2(16, 124)
+	player_xp_bar.size = Vector2(318, 12)
+	player_status_hud.add_child(player_xp_bar)
+
+func _make_status_label(position: Vector2, size: Vector2, color: Color) -> Label:
+	var label := Label.new()
+	label.position = position
+	label.size = size
+	label.add_theme_font_size_override("font_size", 15)
+	label.add_theme_color_override("font_color", color)
+	return label
+
+func _make_status_bar(max_value: int, fill_color: Color) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.min_value = 0
+	bar.max_value = max_value
+	bar.show_percentage = false
+	var background := StyleBoxFlat.new()
+	background.bg_color = Color("#182238")
+	background.set_corner_radius_all(5)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = fill_color
+	fill.set_corner_radius_all(5)
+	bar.add_theme_stylebox_override("background", background)
+	bar.add_theme_stylebox_override("fill", fill)
+	return bar
+
+func _refresh_player_status_hud() -> void:
+	if player_hp_label == null:
+		return
+	player_hp_label.text = "生命  %d / %d" % [battle_player_hp, PLAYER_MAX_HP]
+	player_hp_bar.value = battle_player_hp
+	player_mana_label.text = "魔法  %d / %d" % [player_mana, PLAYER_MAX_MANA]
+	player_mana_bar.value = player_mana
+	player_xp_label.text = "经验  Lv.%d  ·  %d / %d" % [player_level, player_xp, XP_PER_LEVEL]
+	player_xp_bar.value = player_xp
+	if player_status_3d_label != null:
+		player_status_3d_label.text = "HP %d/%d   MP %d/%d   LV.%d  XP %d%%" % [battle_player_hp, PLAYER_MAX_HP, player_mana, PLAYER_MAX_MANA, player_level, player_xp]
+		_set_player_3d_bar(player_3d_hp_fill, float(battle_player_hp) / PLAYER_MAX_HP)
+		_set_player_3d_bar(player_3d_mana_fill, float(player_mana) / PLAYER_MAX_MANA)
+		_set_player_3d_bar(player_3d_xp_fill, float(player_xp) / XP_PER_LEVEL)
+
+func _set_player_3d_bar(fill: MeshInstance3D, ratio: float) -> void:
+	var normalized_ratio := clampf(ratio, 0.0, 1.0)
+	var fill_mesh := fill.mesh as BoxMesh
+	fill_mesh.size.x = maxf(0.01, 2.9 * normalized_ratio)
+	fill.position.x = -1.45 + fill_mesh.size.x / 2.0
+
+func _grant_battle_victory_xp() -> void:
+	player_xp += BATTLE_VICTORY_XP
+	while player_xp >= XP_PER_LEVEL:
+		player_xp -= XP_PER_LEVEL
+		player_level += 1
+	_refresh_player_status_hud()
 
 func _setup_deck_and_codex_ui(layer: CanvasLayer) -> void:
 	deck_view_panel = _make_collection_panel(Vector2(290, 94), Vector2(700, 532), Color("#35d0c2"))
@@ -633,25 +788,49 @@ func _setup_battle_ui(layer: CanvasLayer) -> void:
 	battle_turn_label.add_theme_color_override("font_color", Color("#c4b5fd"))
 	battle_panel.add_child(battle_turn_label)
 
-	var player_status := _make_battle_status_panel(Vector2(32, 62), Vector2(540, 94), Color("#1d827d"))
+	var player_status := _make_battle_status_panel(Vector2(32, 62), Vector2(540, 106), Color("#1d827d"))
 	battle_panel.add_child(player_status)
 	var player_name := Label.new()
-	player_name.position = Vector2(18, 10)
+	player_name.position = Vector2(18, 6)
 	player_name.text = "你  /  PLAYER"
 	player_name.add_theme_font_size_override("font_size", 17)
 	player_name.add_theme_color_override("font_color", Color("#99f6e4"))
 	player_status.add_child(player_name)
 	battle_player_hp_text = Label.new()
-	battle_player_hp_text.position = Vector2(430, 10)
+	battle_player_hp_text.position = Vector2(430, 6)
 	battle_player_hp_text.size = Vector2(90, 26)
 	battle_player_hp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	battle_player_hp_text.add_theme_font_size_override("font_size", 17)
 	battle_player_hp_text.add_theme_color_override("font_color", Color("#e6fffb"))
 	player_status.add_child(battle_player_hp_text)
 	battle_player_hp_bar = _make_battle_hp_bar(Color("#35d0c2"))
-	battle_player_hp_bar.position = Vector2(18, 52)
-	battle_player_hp_bar.size = Vector2(504, 20)
+	battle_player_hp_bar.position = Vector2(18, 31)
+	battle_player_hp_bar.size = Vector2(504, 14)
 	player_status.add_child(battle_player_hp_bar)
+	battle_mana_text = _make_status_label(Vector2(430, 48), Vector2(90, 17), Color("#bfdbfe"))
+	battle_mana_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	battle_mana_text.add_theme_font_size_override("font_size", 12)
+	player_status.add_child(battle_mana_text)
+	var battle_mana_label := _make_status_label(Vector2(18, 48), Vector2(100, 17), Color("#93c5fd"))
+	battle_mana_label.text = "魔法"
+	battle_mana_label.add_theme_font_size_override("font_size", 12)
+	player_status.add_child(battle_mana_label)
+	battle_mana_bar = _make_status_bar(PLAYER_MAX_MANA, Color("#60a5fa"))
+	battle_mana_bar.position = Vector2(18, 65)
+	battle_mana_bar.size = Vector2(504, 9)
+	player_status.add_child(battle_mana_bar)
+	battle_xp_text = _make_status_label(Vector2(430, 77), Vector2(90, 17), Color("#fde68a"))
+	battle_xp_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	battle_xp_text.add_theme_font_size_override("font_size", 12)
+	player_status.add_child(battle_xp_text)
+	var battle_xp_label := _make_status_label(Vector2(18, 77), Vector2(100, 17), Color("#fde68a"))
+	battle_xp_label.text = "经验  Lv.%d" % player_level
+	battle_xp_label.add_theme_font_size_override("font_size", 12)
+	player_status.add_child(battle_xp_label)
+	battle_xp_bar = _make_status_bar(XP_PER_LEVEL, Color("#fbbf24"))
+	battle_xp_bar.position = Vector2(18, 94)
+	battle_xp_bar.size = Vector2(504, 9)
+	player_status.add_child(battle_xp_bar)
 
 	var opponent_status := _make_battle_status_panel(Vector2(620, 62), Vector2(540, 94), Color("#7c54b5"))
 	battle_panel.add_child(opponent_status)
@@ -855,6 +1034,8 @@ func _update_camera() -> void:
 	var desired := player.global_position + Vector3(0, 4.6, 7.5)
 	camera.global_position = camera.global_position.lerp(desired, 0.12)
 	camera.look_at(player.global_position + Vector3(0, 0.8, 0), Vector3.UP)
+	if player_status_3d != null:
+		player_status_3d.global_basis = camera.global_basis
 
 func _update_nearby_npc() -> void:
 	var closest: Node3D = null
@@ -1020,7 +1201,6 @@ func _start_battle(npc: Node3D) -> void:
 	_close_dialogue()
 	_close_shop()
 	battle_opponent = npc
-	battle_player_hp = 30
 	battle_opponent_hp = 30
 	battle_block = 0
 	battle_turn = 1
@@ -1110,6 +1290,7 @@ func _play_battle_card(index: int) -> void:
 	if battle_opponent_hp <= 0:
 		battle_finished = true
 		battle_won = true
+		_grant_battle_victory_xp()
 		battle_feedback_text = "你赢下了牌战。顾言认可了你的读牌能力。"
 	_refresh_battle_ui()
 
@@ -1159,10 +1340,15 @@ func _refresh_battle_ui() -> void:
 	if battle_panel == null or not battle_panel.visible:
 		return
 	battle_turn_label.text = "DUEL  %02d" % battle_turn
-	battle_player_hp_text.text = "%d / 30" % battle_player_hp
+	battle_player_hp_text.text = "%d / %d" % [battle_player_hp, PLAYER_MAX_HP]
 	battle_opponent_hp_text.text = "%d / 30" % battle_opponent_hp
 	battle_player_hp_bar.value = battle_player_hp
 	battle_opponent_hp_bar.value = battle_opponent_hp
+	battle_mana_text.text = "%d / %d" % [player_mana, PLAYER_MAX_MANA]
+	battle_mana_bar.value = player_mana
+	battle_xp_text.text = "%d / %d" % [player_xp, XP_PER_LEVEL]
+	battle_xp_bar.value = player_xp
+	_refresh_player_status_hud()
 	battle_status.text = "本回合牌类额度  %s     格挡  %d" % [_battle_type_limit_summary(), battle_block]
 	battle_deck_label.text = "你的手牌     %d / 5 张  ·  牌库 %d  ·  弃牌 %d" % [battle_hand.size(), battle_deck.size(), battle_discard.size()]
 	if battle_finished:

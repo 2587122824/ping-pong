@@ -17,9 +17,13 @@ func _run() -> void:
 
 	game._start_battle(challenger)
 	assert(game.battle_panel.visible, "Starting a battle should show the battle panel")
+	assert(game.battle_player_hp == 30, "The first battle should start at full health")
 	assert(game.battle_hand.size() == 5, "A battle should start with five cards")
 	assert(game.battle_card_widgets.size() == 5, "The battle should create five structured card faces")
 	assert(game.battle_animation_layer != null, "The battle should create a card animation layer")
+	assert(game.player_status_3d != null, "The player should have a world-space status panel")
+	assert(game.player_hp_bar.value == 30, "The HUD should display player health")
+	assert(game.player_mana_bar.value == game.PLAYER_MAX_MANA, "The HUD should display player mana")
 	game.battle_hand.clear()
 	for test_card in ["forehand", "backhand", "guard", "curve", "boost", "recycle"]:
 		game.battle_hand.append({"id": test_card})
@@ -47,6 +51,7 @@ func _run() -> void:
 
 	game._end_battle_turn()
 	assert(game.battle_player_hp == 29, "Seven block should reduce an eight damage attack to one")
+	assert(game.player_hp_bar.value == 29, "The HUD should reflect damage after turn resolution")
 	assert(game.battle_turn == 2, "Ending a surviving turn should advance the turn")
 	assert(game.battle_category_uses.is_empty(), "Ending a surviving turn should reset category limits")
 	assert(game.battle_next_action_damage_bonus == 0, "Ending a turn should clear the tactic bonus")
@@ -94,6 +99,21 @@ func _run() -> void:
 	game._refresh_battle_ui()
 	assert(not game.battle_shuffle_pending, "Refreshing the battle UI should launch and clear the shuffle animation request")
 	assert(game.battle_pending_draw_indices.is_empty(), "Launching draw animations should clear the draw queue")
+
+	game._close_battle()
+	game._start_battle(challenger)
+	assert(game.battle_player_hp == 29, "Starting another battle should preserve lost health")
+	game.battle_hand.clear()
+	game.battle_hand.append({"id": "backhand"})
+	game.battle_opponent_hp = 4
+	game._play_battle_card(0)
+	assert(game.battle_finished and game.battle_won, "Lethal damage should still resolve a victory")
+	assert(game.player_xp == 25, "A victory should grant experience")
+	game._close_battle()
+	game._start_battle(challenger)
+	assert(game.battle_player_hp == 29, "Health should remain unchanged after victory and starting the next battle")
+	assert(game.player_xp == 25, "Experience should persist between battles")
+	assert(game.player_xp_bar.value == 25, "The experience HUD should display earned experience")
 
 	print("Battle smoke test passed")
 	quit()
