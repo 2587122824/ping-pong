@@ -35,9 +35,6 @@ var player_level_label: Label
 var player_hp_label: Label
 var player_hp_bar: ProgressBar
 var player_hp_value: Label
-var player_stamina_label: Label
-var player_stamina_bar: ProgressBar
-var player_stamina_value: Label
 var player_xp_label: Label
 var player_xp_bar: ProgressBar
 var player_xp_value: Label
@@ -576,7 +573,7 @@ func _setup_ui() -> void:
 func _setup_player_status_hud(layer: CanvasLayer) -> void:
 	player_status_hud = Panel.new()
 	player_status_hud.position = Vector2(40, 88)
-	player_status_hud.size = Vector2(300, 122)
+	player_status_hud.size = Vector2(300, 96)
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.025, 0.045, 0.07, 0.78)
 	panel_style.border_color = Color("#34495c")
@@ -605,24 +602,13 @@ func _setup_player_status_hud(layer: CanvasLayer) -> void:
 	player_hp_value.add_theme_font_size_override("font_size", 12)
 	player_status_hud.add_child(player_hp_value)
 
-	player_stamina_label = _make_status_label(Vector2(14, 60), Vector2(52, 18), Color("#82c5ff"))
-	player_status_hud.add_child(player_stamina_label)
-	player_stamina_bar = _make_status_bar(PLAYER_MAX_STAMINA, Color("#60a5fa"))
-	player_stamina_bar.position = Vector2(72, 65)
-	player_stamina_bar.size = Vector2(132, 9)
-	player_status_hud.add_child(player_stamina_bar)
-	player_stamina_value = _make_status_label(Vector2(212, 60), Vector2(74, 18), Color("#e3eaf0"))
-	player_stamina_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	player_stamina_value.add_theme_font_size_override("font_size", 12)
-	player_status_hud.add_child(player_stamina_value)
-
-	player_xp_label = _make_status_label(Vector2(14, 86), Vector2(52, 18), Color("#f3c96b"))
+	player_xp_label = _make_status_label(Vector2(14, 60), Vector2(52, 18), Color("#f3c96b"))
 	player_status_hud.add_child(player_xp_label)
 	player_xp_bar = _make_status_bar(XP_PER_LEVEL, Color("#fbbf24"))
-	player_xp_bar.position = Vector2(72, 91)
+	player_xp_bar.position = Vector2(72, 65)
 	player_xp_bar.size = Vector2(132, 9)
 	player_status_hud.add_child(player_xp_bar)
-	player_xp_value = _make_status_label(Vector2(212, 86), Vector2(74, 18), Color("#e3eaf0"))
+	player_xp_value = _make_status_label(Vector2(212, 60), Vector2(74, 18), Color("#e3eaf0"))
 	player_xp_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	player_xp_value.add_theme_font_size_override("font_size", 12)
 	player_status_hud.add_child(player_xp_value)
@@ -670,10 +656,6 @@ func _refresh_player_status_hud() -> void:
 	player_hp_label.tooltip_text = "当前生命值"
 	player_hp_bar.value = battle_player_hp
 	player_hp_value.text = "%d / %d" % [battle_player_hp, PLAYER_MAX_HP]
-	player_stamina_label.text = "体力"
-	player_stamina_label.tooltip_text = "当前体力值"
-	player_stamina_bar.value = player_stamina
-	player_stamina_value.text = "%d / %d" % [player_stamina, PLAYER_MAX_STAMINA]
 	player_xp_label.text = "经验"
 	player_xp_label.tooltip_text = "升级经验进度"
 	player_xp_bar.value = player_xp
