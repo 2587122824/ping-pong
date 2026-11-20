@@ -27,18 +27,22 @@ func _run() -> void:
 	assert(game.player_mana_bar.value == game.PLAYER_MAX_MANA, "The HUD should display player mana")
 	assert(game.player_hp_value.text == "30 / 30", "The HUD should display the health value")
 	assert(game.player_mana_value.text == "10 / 10", "The HUD should display the mana value")
+	assert(game._get_weapon_attack() == 2, "The default racket should provide two weapon attack")
+	assert(game.equipment_slots["weapon"] == "starter_racket", "The default weapon slot should contain the starter racket")
+	assert(game.equipment_slots["clothes"] == "" and game.equipment_slots["shoes"] == "" and game.equipment_slots["hat"] == "", "Non-weapon equipment slots should start empty")
+	assert(game.equipment_summary.text.contains("+2"), "The equipment panel summary should show the starter racket attack")
 	game.battle_hand.clear()
 	for test_card in ["forehand", "backhand", "guard", "curve", "boost", "recycle"]:
 		game.battle_hand.append({"id": test_card})
 
 	var forehand_index := _find_card(game, "forehand")
 	game._play_battle_card(forehand_index)
-	assert(game.battle_opponent_hp == 24, "Forehand should deal six damage")
+	assert(game.battle_opponent_hp == 22, "Forehand should deal six base damage plus two weapon damage")
 	assert(game.battle_category_uses["action"] == 1, "An action card should consume the shared action limit")
 	assert(game.battle_hand.size() == 5, "A six-card test hand should return to five after one play")
 	var second_damage_index := _find_card(game, "backhand")
 	game._play_battle_card(second_damage_index)
-	assert(game.battle_opponent_hp == 24, "A second action card should be blocked by the shared action limit")
+	assert(game.battle_opponent_hp == 22, "A second action card should be blocked by the shared action limit")
 	assert(_find_card(game, "backhand") >= 0, "A blocked card should remain in the hand")
 	assert(game.battle_feedback_text.contains("行动牌"), "The blocked card should explain the category limit")
 
@@ -69,7 +73,7 @@ func _run() -> void:
 	game._play_battle_card(boost_index)
 	var curve_index := _find_card(game, "curve")
 	game._play_battle_card(curve_index)
-	assert(game.battle_opponent_hp == 24, "The tactic bonus should apply to a disrupt action")
+	assert(game.battle_opponent_hp == 22, "The tactic bonus should apply on top of weapon damage to a disrupt action")
 	assert(game.battle_next_action_damage_bonus == 0, "The tactic bonus should be consumed by the next action")
 	assert(game.battle_weakens_opponent, "Disrupt should weaken the opponent")
 

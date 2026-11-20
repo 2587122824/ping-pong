@@ -7,6 +7,7 @@ const PLAYER_MAX_HP := 30
 const PLAYER_MAX_MANA := 10
 const XP_PER_LEVEL := 100
 const BATTLE_VICTORY_XP := 25
+const EQUIPMENT_SLOT_NAMES := {"weapon": "武器", "clothes": "衣服", "shoes": "鞋子", "hat": "帽子"}
 
 var player: CharacterBody3D
 var camera: Camera3D
@@ -21,6 +22,10 @@ var economy_text: Label
 var inventory_grid: GridContainer
 var inventory_slots: Array[Button] = []
 var inventory_feedback: Label
+var equipment_button: Button
+var equipment_panel: Panel
+var equipment_summary: Label
+var equipment_slot_widgets: Dictionary = {}
 var player_status_hud: Panel
 var player_level_label: Label
 var player_hp_label: Label
@@ -90,12 +95,16 @@ var battle_feedback_text := ""
 var player_deck: Array[String] = ["forehand", "backhand", "guard", "curve", "boost", "recycle", "forehand", "backhand", "guard", "curve", "boost", "recycle", "forehand", "backhand"]
 
 var battle_card_definitions := {
-	"forehand": {"name": "正手击打", "type": "action", "effect": "damage", "value": 6, "description": "造成 6 点伤害"},
-	"backhand": {"name": "反手快攻", "type": "action", "effect": "damage", "value": 4, "description": "造成 4 点伤害"},
+	"forehand": {"name": "正手击打", "type": "action", "effect": "damage", "value": 6, "description": "基础伤害 6，额外加武器攻击值"},
+	"backhand": {"name": "反手快攻", "type": "action", "effect": "damage", "value": 4, "description": "基础伤害 4，额外加武器攻击值"},
 	"guard": {"name": "架拍格挡", "type": "defense", "effect": "block", "value": 7, "description": "抵挡本回合 7 点伤害"},
-	"curve": {"name": "旋球扰乱", "type": "action", "effect": "disrupt", "value": 3, "description": "造成 3 点伤害，并削弱对手本回合攻击"},
+	"curve": {"name": "旋球扰乱", "type": "action", "effect": "disrupt", "value": 3, "description": "基础伤害 3 + 武器攻击值，并削弱对手本回合攻击"},
 	"boost": {"name": "战术增幅", "type": "tactic", "effect": "next_action_bonus", "value": 3, "description": "强化下一张行动牌，使其伤害 +3"},
 	"recycle": {"name": "数据回收", "type": "resource", "effect": "draw", "value": 1, "description": "抽 1 张牌，补充手牌选择"}
+}
+var equipment_slots := {"weapon": "starter_racket", "clothes": "", "shoes": "", "hat": ""}
+var equipment_definitions := {
+	"starter_racket": {"name": "训练球拍", "slot": "weapon", "attack": 2, "description": "主角的基础武器。攻击行动牌额外造成 2 点伤害。"}
 }
 var money := 120
 var inventory := {
@@ -185,6 +194,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_ESCAPE:
 			if battle_panel != null and battle_panel.visible:
 				_close_battle()
+			elif equipment_panel != null and equipment_panel.visible:
+				equipment_panel.visible = false
 			elif deck_view_panel != null and deck_view_panel.visible:
 				deck_view_panel.visible = false
 			elif codex_panel != null and codex_panel.visible:
@@ -441,18 +452,25 @@ func _setup_ui() -> void:
 
 	deck_view_button = Button.new()
 	deck_view_button.position = Vector2(16, 366)
-	deck_view_button.size = Vector2(150, 42)
+	deck_view_button.size = Vector2(102, 42)
 	deck_view_button.text = "牌组"
 	deck_view_button.add_theme_font_size_override("font_size", 16)
 	deck_view_button.pressed.connect(_open_deck_view)
 	economy_hud.add_child(deck_view_button)
 	codex_button = Button.new()
-	codex_button.position = Vector2(184, 366)
-	codex_button.size = Vector2(150, 42)
-	codex_button.text = "卡牌图鉴"
+	codex_button.position = Vector2(124, 366)
+	codex_button.size = Vector2(102, 42)
+	codex_button.text = "图鉴"
 	codex_button.add_theme_font_size_override("font_size", 16)
 	codex_button.pressed.connect(_open_codex)
 	economy_hud.add_child(codex_button)
+	equipment_button = Button.new()
+	equipment_button.position = Vector2(244, 366)
+	equipment_button.size = Vector2(90, 42)
+	equipment_button.text = "装备"
+	equipment_button.add_theme_font_size_override("font_size", 16)
+	equipment_button.pressed.connect(_open_equipment)
+	economy_hud.add_child(equipment_button)
 
 	shop_panel = Panel.new()
 	shop_panel.position = Vector2(60, 150)
@@ -507,6 +525,7 @@ func _setup_ui() -> void:
 	close_hint.add_theme_color_override("font_color", Color("#a9bfd1"))
 	shop_panel.add_child(close_hint)
 	_setup_deck_and_codex_ui(layer)
+	_setup_equipment_ui(layer)
 	_setup_battle_ui(layer)
 
 	_refresh_economy_hud()
@@ -670,6 +689,87 @@ func _setup_deck_and_codex_ui(layer: CanvasLayer) -> void:
 	_refresh_deck_view()
 	_refresh_codex()
 
+func _setup_equipment_ui(layer: CanvasLayer) -> void:
+	equipment_panel = _make_collection_panel(Vector2(330, 112), Vector2(620, 472), Color("#e5aa52"))
+	equipment_panel.visible = false
+	layer.add_child(equipment_panel)
+	var title := _make_collection_title("角色装备", Color("#ffd166"))
+	equipment_panel.add_child(title)
+	equipment_summary = Label.new()
+	equipment_summary.position = Vector2(30, 64)
+	equipment_summary.size = Vector2(550, 32)
+	equipment_summary.add_theme_font_size_override("font_size", 16)
+	equipment_summary.add_theme_color_override("font_color", Color("#c8d5e4"))
+	equipment_panel.add_child(equipment_summary)
+	for slot_id in EQUIPMENT_SLOT_NAMES:
+		var slot_panel := Panel.new()
+		slot_panel.position = Vector2(30, 112 + equipment_slot_widgets.size() * 72)
+		slot_panel.size = Vector2(560, 60)
+		var slot_style := StyleBoxFlat.new()
+		slot_style.bg_color = Color("#151e30")
+		slot_style.border_color = Color("#3a4c60")
+		slot_style.set_border_width_all(1)
+		slot_style.set_corner_radius_all(6)
+		slot_panel.add_theme_stylebox_override("panel", slot_style)
+		var slot_label := Label.new()
+		slot_label.position = Vector2(14, 17)
+		slot_label.size = Vector2(100, 26)
+		slot_label.text = EQUIPMENT_SLOT_NAMES[slot_id]
+		slot_label.add_theme_font_size_override("font_size", 17)
+		slot_label.add_theme_color_override("font_color", Color("#9fb2c7"))
+		slot_panel.add_child(slot_label)
+		var item_label := Label.new()
+		item_label.position = Vector2(126, 12)
+		item_label.size = Vector2(410, 36)
+		item_label.add_theme_font_size_override("font_size", 17)
+		item_label.add_theme_color_override("font_color", Color("#f1f5f9"))
+		slot_panel.add_child(item_label)
+		equipment_panel.add_child(slot_panel)
+		equipment_slot_widgets[slot_id] = item_label
+	var close_button := _make_collection_close_button()
+	close_button.pressed.connect(func(): equipment_panel.visible = false)
+	equipment_panel.add_child(close_button)
+	_refresh_equipment_ui()
+
+func _open_equipment() -> void:
+	if battle_panel != null and battle_panel.visible:
+		return
+	deck_view_panel.visible = false
+	codex_panel.visible = false
+	_refresh_equipment_ui()
+	equipment_panel.visible = true
+
+func _refresh_equipment_ui() -> void:
+	if equipment_summary == null:
+		return
+	var weapon_attack := _get_weapon_attack()
+	equipment_summary.text = "当前武器攻击 +%d  ·  攻击牌伤害 = 卡牌基础伤害 + 武器攻击" % weapon_attack
+	for slot_id in EQUIPMENT_SLOT_NAMES:
+		var item_id: String = equipment_slots.get(slot_id, "")
+		var item_label: Label = equipment_slot_widgets[slot_id]
+		if item_id.is_empty() or not equipment_definitions.has(item_id):
+			item_label.text = "未装备"
+			item_label.add_theme_color_override("font_color", Color("#78899b"))
+			continue
+		var item: Dictionary = equipment_definitions[item_id]
+		var item_text := String(item["name"])
+		if slot_id == "weapon":
+			item_text += "    攻击 +%d" % int(item.get("attack", 0))
+		item_label.text = item_text
+		item_label.add_theme_color_override("font_color", Color("#f1f5f9"))
+
+func _get_weapon_attack() -> int:
+	var weapon_id: String = equipment_slots.get("weapon", "")
+	if weapon_id.is_empty() or not equipment_definitions.has(weapon_id):
+		return 0
+	return int(equipment_definitions[weapon_id].get("attack", 0))
+
+func _card_display_description(card: Dictionary) -> String:
+	var effect := String(card.get("effect", ""))
+	if String(card.get("type", "")) == "action" and effect in ["damage", "disrupt"]:
+		return "%s  ·  当前武器 +%d" % [card["description"], _get_weapon_attack()]
+	return String(card["description"])
+
 func _make_collection_panel(position: Vector2, size: Vector2, accent: Color) -> Panel:
 	var panel := Panel.new()
 	panel.position = position
@@ -766,7 +866,7 @@ func _make_collection_card_row(card_id: String, trailing_text: String) -> Panel:
 	var description := Label.new()
 	description.position = Vector2(98, 38)
 	description.size = Vector2(420, 22)
-	description.text = card["description"]
+	description.text = _card_display_description(card)
 	description.add_theme_font_size_override("font_size", 14)
 	description.add_theme_color_override("font_color", Color("#aebbd0"))
 	row.add_child(description)
@@ -1126,7 +1226,7 @@ func _close_dialogue() -> void:
 	dialogue_panel.visible = false
 
 func _is_modal_open() -> bool:
-	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible)
+	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible)
 
 func _enter_gate() -> void:
 	var error := get_tree().change_scene_to_file("res://TransitRoom.tscn")
@@ -1137,6 +1237,7 @@ func _toggle_inventory() -> void:
 	if economy_hud.visible:
 		deck_view_panel.visible = false
 		codex_panel.visible = false
+		equipment_panel.visible = false
 	economy_hud.visible = not economy_hud.visible
 
 func _open_shop(npc: Node3D) -> void:
@@ -1332,6 +1433,8 @@ func _play_battle_card(index: int) -> void:
 	match card_type:
 		"action":
 			var action_value: int = card["value"]
+			if effect in ["damage", "disrupt"]:
+				action_value += _get_weapon_attack()
 			action_value += battle_next_action_damage_bonus
 			battle_next_action_damage_bonus = 0
 			if effect == "damage":
@@ -1454,7 +1557,7 @@ func _refresh_battle_ui() -> void:
 			art_symbol.text = _card_symbol(card_type)
 			art_symbol.add_theme_color_override("font_color", accent)
 			var description_label: Label = widgets["description"]
-			description_label.text = card["description"]
+			description_label.text = _card_display_description(card)
 			var footer_label: Label = widgets["footer"]
 			footer_label.text = "TYPE %s     /     FIELD TEST" % card_type.to_upper()
 			button.add_theme_stylebox_override("normal", _battle_card_style(Color("#202c42"), Color(accent, 0.75)))

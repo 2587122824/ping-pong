@@ -32,7 +32,13 @@
 & "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_battle.gd
 ```
 
-右上角背包 HUD 提供“牌组”和“卡牌图鉴”入口：牌组页查看当前固定测试牌组，图鉴页查看已实现卡牌的类型、每回合使用上限、效果和是否已加入牌组。运行收藏信息冒烟测试：
+右上角背包 HUD 提供“牌组”“图鉴”和“装备”入口。装备页包含武器、衣服、鞋子、帽子四个槽位；开局默认装备攻击 +2 的训练球拍，其余槽位为空。正手击打、反手快攻和旋球扰乱的伤害等于卡牌基础伤害加武器攻击，战术增幅再额外叠加 +3。装备暂不支持获取、替换或强化。运行装备与伤害公式测试：
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_equipment.gd
+```
+
+牌组页查看当前固定测试牌组，图鉴页查看已实现卡牌的类型、每回合使用上限、效果和是否已加入牌组。运行收藏信息冒烟测试：
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_collection.gd
