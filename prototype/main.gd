@@ -55,6 +55,7 @@ var shop_balance: Label
 var shop_feedback: Label
 var shop_rows: VBoxContainer
 var battle_panel: Panel
+var battle_title_label: Label
 var battle_status: Label
 var battle_intent: Label
 var battle_feedback: Label
@@ -64,6 +65,7 @@ var battle_player_hp_bar: ProgressBar
 var battle_opponent_hp_bar: ProgressBar
 var battle_player_hp_text: Label
 var battle_opponent_hp_text: Label
+var battle_opponent_name_label: Label
 var battle_stamina_bar: ProgressBar
 var battle_stamina_text: Label
 var battle_xp_bar: ProgressBar
@@ -76,10 +78,18 @@ var battle_shuffle_pending := false
 var battle_animation_layer: Control
 var battle_end_button: Button
 var battle_opponent: Node3D
+var level_select_panel: Panel
+var level_select_summary: Label
+var level_select_buttons: Dictionary = {}
+var level_deck_buttons: Dictionary = {}
+var level_start_button: Button
+var level_selected_id := "CH1-01"
+var level_challenger: Node3D
 var dialogue_index := 0
 var dialogue_lines: Array[String] = []
 var battle_player_hp := PLAYER_MAX_HP
 var battle_opponent_hp := 30
+var battle_opponent_max_hp := 30
 var player_stamina := PLAYER_MAX_STAMINA
 var player_xp := 0
 var player_level := 1
@@ -95,6 +105,10 @@ var battle_deck: Array[String] = []
 var battle_discard: Array[String] = []
 var battle_next_action_damage_bonus := 0
 var battle_feedback_text := ""
+var current_level_id := "CH1-01"
+var current_level: Dictionary = {}
+var battle_intent_index := 0
+var level_rewards_claimed: Dictionary = {}
 var active_deck_id := "table_tennis"
 var battle_decks := {
 	"table_tennis": {"name": "乒乓球 · 近台快攻", "cards": ["tt_main", "tt_sub", "tt_control", "tt_defense", "tt_resource", "tt_tactic"]},
@@ -102,6 +116,47 @@ var battle_decks := {
 	"tennis": {"name": "网球 · 底线相持", "cards": ["ten_main", "ten_sub", "ten_control", "ten_defense", "ten_resource", "ten_tactic"]}
 }
 var player_deck: Array[String] = ["tt_main", "tt_sub", "tt_control", "tt_defense", "tt_resource", "tt_tactic"]
+
+var level_definitions := {
+	"CH0-01": {
+		"name": "发球机·初号", "type": "教学", "max_hp": 36, "reward_xp": 10,
+		"intents": [
+			{"name": "送球", "damage": 6}, {"name": "送球", "damage": 6}, {"name": "送球", "damage": 6}
+		],
+		"pre_battle": "训练协议：先观察意图，再安排出牌。", "defeat_hint": "教学关会重新开始。"
+	},
+	"CH0-B01": {
+		"name": "裁判机器人", "type": "BOSS", "max_hp": 75, "reward_xp": 100,
+		"intents": [
+			{"name": "判定·警告", "damage": 10},
+			{"name": "蓄力", "damage": 0, "charge": true, "next_damage": 18},
+			{"name": "判定·罚分", "damage": 18}
+		],
+		"pre_battle": "它会先蓄力再重击。蓄力回合是抢输出还是先垫格挡？", "defeat_hint": "重击 18 点，一张格挡挡不住；试试牵制或在蓄力回合输出。"
+	},
+	"CH1-01": {
+		"name": "陪练机器人", "type": "主线", "max_hp": 55, "reward_xp": 25,
+		"intents": [
+			{"name": "快带", "damage": 10}, {"name": "挡球", "damage": 8}, {"name": "挡球", "damage": 8}
+		],
+		"pre_battle": "节奏不快，但每一拍都在试你的体力分配。", "defeat_hint": "先看下一拍再决定出什么，格挡只在本回合有效。"
+	},
+	"CH1-E01": {
+		"name": "破防型选手", "type": "精英", "max_hp": 70, "reward_xp": 60,
+		"intents": [
+			{"name": "试探", "damage": 8}, {"name": "破防", "damage": 14, "armor_break": true}, {"name": "追身", "damage": 8}
+		],
+		"pre_battle": "它有一拍能穿透防守。建议满血再来。", "defeat_hint": "破防那一下格挡没用，用牵制把它减半，或者换输出。"
+	},
+	"CH1-S01": {
+		"name": "节奏控制器", "type": "支线", "max_hp": 65, "reward_xp": 40, "repeat_xp": 10, "first_items": {"med_patch": 2},
+		"intents": [
+			{"name": "重切", "damage": 12}, {"name": "搓短", "damage": 6},
+			{"name": "拖慢", "damage": 6, "suppress_recovery": 10}
+		],
+		"pre_battle": "它会拖慢你的恢复节奏，别指望攒够一回合的体力。", "defeat_hint": "恢复被压低的回合，只出得起一张副攻或一张格挡。"
+	}
+}
 
 var battle_card_definitions := {
 	"tt_main": {"name": "正手冲球", "type": "action", "effect": "damage", "cost": 15, "value": 4, "description": "武器基础伤害 +4 招式伤害"},
@@ -189,6 +244,7 @@ var npcs := [
 		"position": Vector3(5.5, 1.0, -9.0),
 		"color": Color("#a78bfa"),
 		"type": "duelist",
+		"level_id": "CH0-01",
 		"lines": ["来打一局？我会提前亮出下一次进攻意图。"]
 	}
 ]
@@ -222,6 +278,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_ESCAPE:
 			if battle_panel != null and battle_panel.visible:
 				_close_battle()
+			elif level_select_panel != null and level_select_panel.visible:
+				_close_level_select()
 			elif equipment_panel != null and equipment_panel.visible:
 				equipment_panel.visible = false
 			elif talent_panel != null and talent_panel.visible:
@@ -367,6 +425,8 @@ func _setup_npcs() -> void:
 		npc.position = data["position"]
 		npc.set_meta("dialogue_data", data)
 		npc.set_meta("npc_type", data.get("type", "dialogue"))
+		if data.has("level_id"):
+			npc.set_meta("level_id", data["level_id"])
 		var body := MeshInstance3D.new()
 		var capsule := CapsuleMesh.new()
 		capsule.height = 1.9
@@ -565,10 +625,99 @@ func _setup_ui() -> void:
 	_setup_equipment_ui(layer)
 	_setup_talent_ui(layer)
 	_setup_battle_ui(layer)
+	_setup_level_select_ui(layer)
 
 	_refresh_economy_hud()
 	_refresh_inventory_grid()
 	_refresh_player_status_hud()
+
+func _setup_level_select_ui(layer: CanvasLayer) -> void:
+	level_select_panel = Panel.new()
+	level_select_panel.position = Vector2(64, 72)
+	level_select_panel.size = Vector2(1152, 576)
+	level_select_panel.visible = false
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("#101827")
+	style.border_color = Color("#58b4bd")
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(10)
+	level_select_panel.add_theme_stylebox_override("panel", style)
+	layer.add_child(level_select_panel)
+
+	var title := Label.new()
+	title.position = Vector2(28, 20)
+	title.size = Vector2(700, 36)
+	title.text = "训练中心  /  选择挑战"
+	title.add_theme_font_size_override("font_size", 25)
+	title.add_theme_color_override("font_color", Color("#d8f4f3"))
+	level_select_panel.add_child(title)
+
+	var subtitle := Label.new()
+	subtitle.position = Vector2(28, 60)
+	subtitle.size = Vector2(700, 24)
+	subtitle.text = "固定意图循环 · 可在挑战前切换主题牌组"
+	subtitle.add_theme_font_size_override("font_size", 15)
+	subtitle.add_theme_color_override("font_color", Color("#9aafbf"))
+	level_select_panel.add_child(subtitle)
+
+	var list := VBoxContainer.new()
+	list.position = Vector2(28, 106)
+	list.size = Vector2(330, 380)
+	list.add_theme_constant_override("separation", 10)
+	level_select_panel.add_child(list)
+	for level_id in level_definitions:
+		var level: Dictionary = level_definitions[level_id]
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(320, 60)
+		button.text = "%s  ·  %s" % [level["type"], level["name"]]
+		button.add_theme_font_size_override("font_size", 17)
+		button.pressed.connect(_select_level.bind(level_id))
+		list.add_child(button)
+		level_select_buttons[level_id] = button
+
+	level_select_summary = Label.new()
+	level_select_summary.position = Vector2(390, 108)
+	level_select_summary.size = Vector2(700, 160)
+	level_select_summary.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	level_select_summary.add_theme_font_size_override("font_size", 19)
+	level_select_summary.add_theme_color_override("font_color", Color("#e3edf5"))
+	level_select_panel.add_child(level_select_summary)
+
+	var deck_label := Label.new()
+	deck_label.position = Vector2(390, 290)
+	deck_label.text = "出战牌组"
+	deck_label.add_theme_font_size_override("font_size", 16)
+	deck_label.add_theme_color_override("font_color", Color("#9aafbf"))
+	level_select_panel.add_child(deck_label)
+	var deck_row := HBoxContainer.new()
+	deck_row.position = Vector2(390, 320)
+	deck_row.size = Vector2(700, 50)
+	deck_row.add_theme_constant_override("separation", 10)
+	level_select_panel.add_child(deck_row)
+	for deck_id in battle_decks:
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(210, 44)
+		button.text = battle_decks[deck_id]["name"]
+		button.pressed.connect(_select_level_deck.bind(deck_id))
+		deck_row.add_child(button)
+		level_deck_buttons[deck_id] = button
+
+	level_start_button = Button.new()
+	level_start_button.position = Vector2(830, 476)
+	level_start_button.size = Vector2(260, 54)
+	level_start_button.text = "开始挑战"
+	level_start_button.add_theme_font_size_override("font_size", 19)
+	level_start_button.pressed.connect(_start_selected_level)
+	level_select_panel.add_child(level_start_button)
+
+	var cancel_button := Button.new()
+	cancel_button.position = Vector2(390, 476)
+	cancel_button.size = Vector2(180, 54)
+	cancel_button.text = "返回探索  [Esc]"
+	cancel_button.pressed.connect(_close_level_select)
+	level_select_panel.add_child(cancel_button)
+	_select_level(level_selected_id)
+	_refresh_level_deck_buttons()
 
 func _setup_player_status_hud(layer: CanvasLayer) -> void:
 	player_status_hud = Panel.new()
@@ -664,13 +813,21 @@ func _refresh_player_status_hud() -> void:
 		talent_button.text = "天赋  ·  %d 点可用" % player_talent_points
 
 func _grant_battle_victory_xp() -> void:
-	player_xp += BATTLE_VICTORY_XP
+	var first_clear: bool = not bool(level_rewards_claimed.get(current_level_id, false))
+	var reward_xp := int(current_level.get("reward_xp", BATTLE_VICTORY_XP)) if first_clear else int(current_level.get("repeat_xp", BATTLE_VICTORY_XP))
+	player_xp += reward_xp
+	level_rewards_claimed[current_level_id] = true
+	if first_clear:
+		for item_id in current_level.get("first_items", {}):
+			inventory[item_id] = int(inventory.get(item_id, 0)) + int(current_level["first_items"][item_id])
 	while player_xp >= XP_PER_LEVEL:
 		player_xp -= XP_PER_LEVEL
 		player_level += 1
 		player_talent_points += 1
 	_refresh_player_status_hud()
 	_refresh_talent()
+	_refresh_inventory_grid()
+	battle_feedback_text = "你赢下了「%s」，获得 %d 点经验。" % [current_level.get("name", "牌战"), reward_xp]
 
 func _setup_deck_and_codex_ui(layer: CanvasLayer) -> void:
 	deck_view_panel = _make_collection_panel(Vector2(290, 94), Vector2(700, 532), Color("#35d0c2"))
@@ -1073,13 +1230,13 @@ func _setup_battle_ui(layer: CanvasLayer) -> void:
 	battle_panel.add_theme_stylebox_override("panel", style)
 	layer.add_child(battle_panel)
 
-	var title := Label.new()
-	title.position = Vector2(32, 18)
-	title.size = Vector2(650, 30)
-	title.text = "STRATEGY CLUB  //  牌战协议"
-	title.add_theme_font_size_override("font_size", 16)
-	title.add_theme_color_override("font_color", Color("#a99cf2"))
-	battle_panel.add_child(title)
+	battle_title_label = Label.new()
+	battle_title_label.position = Vector2(32, 18)
+	battle_title_label.size = Vector2(650, 30)
+	battle_title_label.text = "STRATEGY CLUB  //  牌战协议"
+	battle_title_label.add_theme_font_size_override("font_size", 16)
+	battle_title_label.add_theme_color_override("font_color", Color("#a99cf2"))
+	battle_panel.add_child(battle_title_label)
 
 	battle_turn_label = Label.new()
 	battle_turn_label.position = Vector2(870, 18)
@@ -1136,12 +1293,12 @@ func _setup_battle_ui(layer: CanvasLayer) -> void:
 
 	var opponent_status := _make_battle_status_panel(Vector2(620, 62), Vector2(540, 94), Color("#7c54b5"))
 	battle_panel.add_child(opponent_status)
-	var opponent_name := Label.new()
-	opponent_name.position = Vector2(18, 10)
-	opponent_name.text = "顾言  /  DUELIST"
-	opponent_name.add_theme_font_size_override("font_size", 17)
-	opponent_name.add_theme_color_override("font_color", Color("#ddd6fe"))
-	opponent_status.add_child(opponent_name)
+	battle_opponent_name_label = Label.new()
+	battle_opponent_name_label.position = Vector2(18, 10)
+	battle_opponent_name_label.text = "对手"
+	battle_opponent_name_label.add_theme_font_size_override("font_size", 17)
+	battle_opponent_name_label.add_theme_color_override("font_color", Color("#ddd6fe"))
+	opponent_status.add_child(battle_opponent_name_label)
 	battle_opponent_hp_text = Label.new()
 	battle_opponent_hp_text.position = Vector2(430, 10)
 	battle_opponent_hp_text.size = Vector2(90, 26)
@@ -1382,9 +1539,54 @@ func _interact_with_npc(npc: Node3D) -> void:
 	if npc_type == "merchant":
 		_open_shop(npc)
 	elif npc_type == "duelist":
-		_start_battle(npc)
+		_open_level_select(npc)
 	else:
 		_open_or_advance_dialogue(npc)
+
+func _open_level_select(npc: Node3D) -> void:
+	level_challenger = npc
+	level_selected_id = String(npc.get_meta("level_id", "CH1-01"))
+	_select_level(level_selected_id)
+	_refresh_level_deck_buttons()
+	level_select_panel.visible = true
+
+func _close_level_select() -> void:
+	level_select_panel.visible = false
+	level_challenger = null
+
+func _select_level(level_id: String) -> void:
+	if not level_definitions.has(level_id):
+		return
+	level_selected_id = level_id
+	var level: Dictionary = level_definitions[level_id]
+	var intent_text := ""
+	for intent in level["intents"]:
+		if not intent_text.is_empty():
+			intent_text += " → "
+		intent_text += "%s %d" % [intent["name"], int(intent["damage"])]
+	level_select_summary.text = "%s\n生命 %d   ·   目标 %s\n意图循环：%s\n\n战前提示：%s" % [level["name"], int(level["max_hp"]), level["type"], intent_text, level["pre_battle"]]
+	for id in level_select_buttons:
+		var button: Button = level_select_buttons[id]
+		button.modulate = Color("#7fe4dd") if id == level_id else Color.WHITE
+
+func _select_level_deck(deck_id: String) -> void:
+	if not battle_decks.has(deck_id):
+		return
+	active_deck_id = deck_id
+	player_deck = battle_decks[deck_id]["cards"].duplicate()
+	_refresh_level_deck_buttons()
+
+func _refresh_level_deck_buttons() -> void:
+	for deck_id in level_deck_buttons:
+		var button: Button = level_deck_buttons[deck_id]
+		button.modulate = Color("#7fe4dd") if deck_id == active_deck_id else Color.WHITE
+
+func _start_selected_level() -> void:
+	if level_challenger == null:
+		return
+	var challenger := level_challenger
+	_close_level_select()
+	_start_battle(challenger, level_selected_id)
 
 func _open_or_advance_dialogue(npc: Node3D) -> void:
 	var data: Dictionary = npc.get_meta("dialogue_data")
@@ -1406,7 +1608,7 @@ func _close_dialogue() -> void:
 	dialogue_panel.visible = false
 
 func _is_modal_open() -> bool:
-	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible) or (talent_panel != null and talent_panel.visible)
+	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (level_select_panel != null and level_select_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible) or (talent_panel != null and talent_panel.visible)
 
 func _enter_gate() -> void:
 	var error := get_tree().change_scene_to_file("res://TransitRoom.tscn")
@@ -1549,18 +1751,29 @@ func _get_shop_item(item_id: String) -> Dictionary:
 			return item
 	return {}
 
-func _start_battle(npc: Node3D) -> void:
+func _start_battle(npc: Node3D, level_id := "") -> void:
 	_close_dialogue()
 	_close_shop()
 	battle_opponent = npc
-	battle_opponent_hp = 30
+	var selected_level_id := level_id if not level_id.is_empty() else String(npc.get_meta("level_id", "CH1-01"))
+	_start_level(selected_level_id)
+
+func _start_level(level_id: String) -> void:
+	if not level_definitions.has(level_id):
+		level_id = "CH1-01"
+	current_level_id = level_id
+	current_level = level_definitions[level_id]
+	battle_opponent_name_label.text = "%s  /  %s" % [current_level["name"], current_level["type"]]
+	battle_opponent_max_hp = int(current_level["max_hp"])
+	battle_opponent_hp = battle_opponent_max_hp
 	player_stamina = PLAYER_MAX_STAMINA
 	battle_block = _get_talent_bonus("start_block")
 	battle_turn = 1
+	battle_intent_index = 0
 	battle_weakens_opponent = false
 	battle_finished = false
 	battle_won = false
-	battle_feedback_text = "牌战开始。先读出对手意图，再决定出牌或结束回合。"
+	battle_feedback_text = String(current_level["pre_battle"])
 	battle_deck = player_deck.duplicate()
 	battle_discard.clear()
 	battle_next_action_damage_bonus = 0
@@ -1645,7 +1858,6 @@ func _play_battle_card(index: int) -> void:
 		battle_finished = true
 		battle_won = true
 		_grant_battle_victory_xp()
-		battle_feedback_text = "你赢下了牌战。顾言认可了你的读牌能力。"
 	_refresh_battle_ui()
 
 func _end_battle_turn() -> void:
@@ -1654,27 +1866,36 @@ func _end_battle_turn() -> void:
 	if battle_finished:
 		_close_battle()
 		return
-	var incoming_damage := 8
+	var current_intent: Dictionary = _get_current_intent()
+	var incoming_damage := int(current_intent.get("damage", 8))
 	if battle_weakens_opponent:
-		incoming_damage = 4
-	var blocked_damage: int = min(battle_block, incoming_damage)
+		incoming_damage = ceili(float(incoming_damage) / 2.0)
+	var armor_break := bool(current_intent.get("armor_break", false))
+	var blocked_damage: int = 0 if armor_break else min(battle_block, incoming_damage)
 	var actual_damage: int = incoming_damage - blocked_damage
-	battle_block = max(0, battle_block - incoming_damage)
+	if not armor_break:
+		battle_block = max(0, battle_block - incoming_damage)
 	battle_player_hp = max(0, battle_player_hp - actual_damage)
 	if actual_damage == 0:
-		battle_feedback_text = "顾言发动 %d 点攻击，但被你的格挡完全挡下。" % incoming_damage
+		battle_feedback_text = "%s 发动 %d 点攻击，但被你的格挡完全挡下。" % [current_intent.get("name", "敌方"), incoming_damage]
+	elif armor_break:
+		battle_feedback_text = "%s 穿透格挡，造成 %d 点伤害。" % [current_intent.get("name", "破防攻击"), actual_damage]
 	else:
-		battle_feedback_text = "顾言发动 %d 点攻击，你受到 %d 点伤害。" % [incoming_damage, actual_damage]
+		battle_feedback_text = "%s 发动 %d 点攻击，你受到 %d 点伤害。" % [current_intent.get("name", "敌方"), incoming_damage, actual_damage]
 	if battle_player_hp <= 0:
 		battle_finished = true
 		battle_won = false
-		battle_feedback_text = "你输掉了牌战。调整出牌节奏后再来挑战。"
+		battle_feedback_text = "你输掉了牌战。%s" % current_level.get("defeat_hint", "调整出牌节奏后再来挑战。")
 	else:
 		battle_turn += 1
-		player_stamina = min(PLAYER_MAX_STAMINA, player_stamina + BATTLE_STAMINA_PER_TURN)
+		var recovery := int(current_level.get("recovery", BATTLE_STAMINA_PER_TURN))
+		if current_intent.has("suppress_recovery"):
+			recovery = int(current_intent["suppress_recovery"])
+		player_stamina = min(PLAYER_MAX_STAMINA, player_stamina + recovery)
 		battle_block = 0
 		battle_weakens_opponent = false
 		battle_next_action_damage_bonus = 0
+		battle_intent_index = (battle_intent_index + 1) % current_level["intents"].size()
 		for played_card in battle_hand:
 			battle_discard.append(String(played_card["id"]))
 		battle_hand.clear()
@@ -1692,25 +1913,43 @@ func _close_battle() -> void:
 	battle_discard.clear()
 	battle_next_action_damage_bonus = 0
 
+func _get_current_intent() -> Dictionary:
+	if current_level.is_empty() or not current_level.has("intents"):
+		return {"name": "普通击打", "damage": 8}
+	var intents: Array = current_level["intents"]
+	if intents.is_empty():
+		return {"name": "普通击打", "damage": 8}
+	return intents[clampi(battle_intent_index, 0, intents.size() - 1)]
+
 func _refresh_battle_ui() -> void:
 	if battle_panel == null or not battle_panel.visible:
 		return
 	battle_turn_label.text = "DUEL  %02d" % battle_turn
 	battle_player_hp_text.text = "%d / %d" % [battle_player_hp, PLAYER_MAX_HP]
-	battle_opponent_hp_text.text = "%d / 30" % battle_opponent_hp
+	battle_opponent_hp_text.text = "%d / %d" % [battle_opponent_hp, battle_opponent_max_hp]
 	battle_player_hp_bar.value = battle_player_hp
+	battle_opponent_hp_bar.max_value = battle_opponent_max_hp
 	battle_opponent_hp_bar.value = battle_opponent_hp
 	battle_stamina_text.text = "%d / %d" % [player_stamina, PLAYER_MAX_STAMINA]
 	battle_stamina_bar.value = player_stamina
 	battle_xp_text.text = "%d / %d" % [player_xp, XP_PER_LEVEL]
 	battle_xp_bar.value = player_xp
 	_refresh_player_status_hud()
+	battle_title_label.text = "STRATEGY CLUB  //  %s  ·  %s" % [current_level.get("type", "牌战"), current_level.get("name", "牌战协议")]
 	battle_status.text = "体力预算  %d / %d     格挡  %d" % [player_stamina, PLAYER_MAX_STAMINA, battle_block]
 	battle_deck_label.text = "你的手牌     %d / 5 张  ·  牌库 %d  ·  弃牌 %d" % [battle_hand.size(), battle_deck.size(), battle_discard.size()]
 	if battle_finished:
 		battle_intent.text = "牌战结束 · %s" % ("胜利" if battle_won else "失败")
 	else:
-		battle_intent.text = "⚠ 顾言准备普通击打   ·   预计造成 8 点伤害   ·   牵制牌可降低至 4 点"
+		var intent: Dictionary = _get_current_intent()
+		var intent_extra := ""
+		if intent.get("charge", false):
+			intent_extra = "   ·   下一击 %d" % int(intent.get("next_damage", 0))
+		elif intent.get("armor_break", false):
+			intent_extra = "   ·   无视格挡"
+		elif intent.has("suppress_recovery"):
+			intent_extra = "   ·   下回合恢复 %d" % int(intent["suppress_recovery"])
+		battle_intent.text = "⚠ %s：预计造成 %d 点伤害%s" % [intent.get("name", "敌方行动"), int(intent.get("damage", 0)), intent_extra]
 	battle_feedback.text = battle_feedback_text
 	battle_end_button.text = "离开牌战" if battle_finished else "结束回合"
 	battle_end_button.disabled = false
