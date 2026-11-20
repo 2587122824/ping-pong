@@ -45,12 +45,6 @@ var battle_card_widgets: Array[Dictionary] = []
 var battle_pending_draw_indices: Array[int] = []
 var battle_shuffle_pending := false
 var battle_animation_layer: Control
-var battle_buff_choice_panel: Panel
-var battle_buff_choice_title: Label
-var battle_buff_choice_row: HBoxContainer
-var battle_buff_choice_buttons: Array[Button] = []
-var battle_buff_choice_open := false
-var battle_pending_buff_value := 0
 var battle_end_button: Button
 var battle_opponent: Node3D
 var dialogue_index := 0
@@ -65,17 +59,18 @@ var battle_won := false
 var battle_hand: Array[Dictionary] = []
 var battle_deck: Array[String] = []
 var battle_discard: Array[String] = []
-var battle_type_uses: Dictionary = {}
-var battle_type_bonus: Dictionary = {}
+var battle_category_uses: Dictionary = {}
+var battle_next_action_damage_bonus := 0
 var battle_feedback_text := ""
-var player_deck: Array[String] = ["forehand", "backhand", "guard", "curve", "boost", "forehand", "backhand", "guard", "curve", "boost", "forehand", "backhand"]
+var player_deck: Array[String] = ["forehand", "backhand", "guard", "curve", "boost", "recycle", "forehand", "backhand", "guard", "curve", "boost", "recycle", "forehand", "backhand"]
 
 var battle_card_definitions := {
-	"forehand": {"name": "正手击打", "type": "damage", "value": 6, "description": "造成 6 点伤害"},
-	"backhand": {"name": "反手快攻", "type": "damage", "value": 4, "description": "造成 4 点伤害"},
-	"guard": {"name": "架拍格挡", "type": "block", "value": 7, "description": "抵挡本回合 7 点伤害"},
-	"curve": {"name": "旋球扰乱", "type": "disrupt", "value": 3, "description": "造成 3 点伤害，并削弱对手本回合攻击"},
-	"boost": {"name": "战术增幅", "type": "buff", "value": 1, "description": "选择一种其他牌类，本回合额外可打出 1 张"}
+	"forehand": {"name": "正手击打", "type": "action", "effect": "damage", "value": 6, "description": "造成 6 点伤害"},
+	"backhand": {"name": "反手快攻", "type": "action", "effect": "damage", "value": 4, "description": "造成 4 点伤害"},
+	"guard": {"name": "架拍格挡", "type": "defense", "effect": "block", "value": 7, "description": "抵挡本回合 7 点伤害"},
+	"curve": {"name": "旋球扰乱", "type": "action", "effect": "disrupt", "value": 3, "description": "造成 3 点伤害，并削弱对手本回合攻击"},
+	"boost": {"name": "战术增幅", "type": "tactic", "effect": "next_action_bonus", "value": 3, "description": "强化下一张行动牌，使其伤害 +3"},
+	"recycle": {"name": "数据回收", "type": "resource", "effect": "draw", "value": 1, "description": "抽 1 张牌，补充手牌选择"}
 }
 var money := 120
 var inventory := {
@@ -764,32 +759,6 @@ func _setup_battle_ui(layer: CanvasLayer) -> void:
 	battle_animation_layer.z_index = 10
 	battle_panel.add_child(battle_animation_layer)
 
-	battle_buff_choice_panel = Panel.new()
-	battle_buff_choice_panel.position = Vector2(250, 290)
-	battle_buff_choice_panel.size = Vector2(692, 154)
-	battle_buff_choice_panel.visible = false
-	battle_buff_choice_panel.z_index = 20
-	battle_buff_choice_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	var choice_style := StyleBoxFlat.new()
-	choice_style.bg_color = Color("#111b2e")
-	choice_style.border_color = Color("#fbbf24")
-	choice_style.set_border_width_all(2)
-	choice_style.set_corner_radius_all(10)
-	battle_buff_choice_panel.add_theme_stylebox_override("panel", choice_style)
-	battle_buff_choice_title = Label.new()
-	battle_buff_choice_title.position = Vector2(20, 14)
-	battle_buff_choice_title.size = Vector2(652, 28)
-	battle_buff_choice_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	battle_buff_choice_title.add_theme_font_size_override("font_size", 18)
-	battle_buff_choice_title.add_theme_color_override("font_color", Color("#fde68a"))
-	battle_buff_choice_panel.add_child(battle_buff_choice_title)
-	battle_buff_choice_row = HBoxContainer.new()
-	battle_buff_choice_row.position = Vector2(20, 58)
-	battle_buff_choice_row.size = Vector2(652, 76)
-	battle_buff_choice_row.add_theme_constant_override("separation", 10)
-	battle_buff_choice_panel.add_child(battle_buff_choice_row)
-	battle_panel.add_child(battle_buff_choice_panel)
-
 	battle_feedback = Label.new()
 	battle_feedback.position = Vector2(32, 510)
 	battle_feedback.size = Vector2(720, 42)
@@ -1061,19 +1030,21 @@ func _start_battle(npc: Node3D) -> void:
 	battle_feedback_text = "牌战开始。先读出对手意图，再决定出牌或结束回合。"
 	battle_deck = player_deck.duplicate()
 	battle_discard.clear()
-	battle_type_uses.clear()
-	battle_type_bonus.clear()
-	battle_buff_choice_open = false
-	battle_pending_buff_value = 0
-	if battle_buff_choice_panel != null:
-		battle_buff_choice_panel.visible = false
+	battle_category_uses.clear()
+	battle_next_action_damage_bonus = 0
 	battle_hand.clear()
 	_draw_battle_cards_to_five()
 	battle_panel.visible = true
 	_refresh_battle_ui()
 
 func _draw_battle_cards_to_five(animate := true) -> void:
-	while battle_hand.size() < 5:
+	_draw_battle_cards(5 - battle_hand.size(), animate)
+
+func _draw_battle_cards(amount: int, animate := true) -> int:
+	var drawn := 0
+	for _card_index in range(max(0, amount)):
+		if battle_hand.size() >= 5:
+			break
 		if battle_deck.is_empty():
 			if battle_discard.is_empty():
 				break
@@ -1082,13 +1053,17 @@ func _draw_battle_cards_to_five(animate := true) -> void:
 			battle_deck.shuffle()
 			if animate:
 				battle_shuffle_pending = true
+		if battle_deck.is_empty():
+			break
 		var card_id: String = battle_deck.pop_front()
 		battle_hand.append({"id": card_id})
+		drawn += 1
 		if animate:
 			battle_pending_draw_indices.append(battle_hand.size() - 1)
+	return drawn
 
 func _play_battle_card(index: int) -> void:
-	if not battle_panel.visible or battle_finished or battle_buff_choice_open:
+	if not battle_panel.visible or battle_finished:
 		return
 	if index < 0 or index >= battle_hand.size():
 		return
@@ -1096,83 +1071,47 @@ func _play_battle_card(index: int) -> void:
 	var card: Dictionary = battle_card_definitions[card_id]
 	var card_origin := battle_cards_container.position + battle_card_buttons[index].position
 	var card_type := String(card["type"])
-	var used_count: int = battle_type_uses.get(card_type, 0)
-	var type_limit := _battle_type_limit(card_type)
+	var used_count: int = battle_category_uses.get(card_type, 0)
+	var type_limit := BATTLE_CARD_TYPE_LIMIT
 	if used_count >= type_limit:
-		battle_feedback_text = "本回合的%s牌已使用，%s牌每回合最多使用 %d 张。" % [_card_category(card_type), _card_category(card_type), type_limit]
+		battle_feedback_text = "本回合的%s牌已使用，每类牌每回合最多使用 %d 张。" % [_card_category(card_type), type_limit]
 		_refresh_battle_ui()
 		return
-	battle_type_uses[card_type] = used_count + 1
+	battle_category_uses[card_type] = used_count + 1
+	var effect := String(card.get("effect", card_type))
+	battle_hand.remove_at(index)
 	match card_type:
-		"damage":
-			battle_opponent_hp = max(0, battle_opponent_hp - card["value"])
-			battle_feedback_text = "你使用「%s」，造成 %d 点伤害。" % [card["name"], card["value"]]
-		"block":
+		"action":
+			var action_value: int = card["value"]
+			action_value += battle_next_action_damage_bonus
+			battle_next_action_damage_bonus = 0
+			if effect == "damage":
+				battle_opponent_hp = max(0, battle_opponent_hp - action_value)
+				battle_feedback_text = "你使用「%s」，造成 %d 点伤害。" % [card["name"], action_value]
+			elif effect == "disrupt":
+				battle_opponent_hp = max(0, battle_opponent_hp - action_value)
+				battle_weakens_opponent = true
+				battle_feedback_text = "你使用「%s」，造成 %d 点伤害并削弱本回合攻击。" % [card["name"], action_value]
+			else:
+				battle_feedback_text = "你使用「%s」。" % card["name"]
+		"defense":
 			battle_block += card["value"]
 			battle_feedback_text = "你使用「%s」，获得 %d 点格挡。" % [card["name"], card["value"]]
-		"disrupt":
-			battle_opponent_hp = max(0, battle_opponent_hp - card["value"])
-			battle_weakens_opponent = true
-			battle_feedback_text = "你使用「%s」，造成 %d 点伤害并削弱本回合攻击。" % [card["name"], card["value"]]
-		"buff":
-			battle_buff_choice_open = true
-			battle_pending_buff_value = card["value"]
-			battle_feedback_text = "你使用「%s」，请选择本回合要强化的牌类。" % card["name"]
+		"tactic":
+			battle_next_action_damage_bonus += card["value"]
+			battle_feedback_text = "你使用「%s」，下一张行动牌伤害 +%d。" % [card["name"], card["value"]]
+		"resource":
+			var actual_draw_count := _draw_battle_cards(card["value"])
+			battle_feedback_text = "你使用「%s」，抽取 %d 张牌。" % [card["name"], actual_draw_count]
 		_:
 			battle_feedback_text = "你使用「%s」。" % card["name"]
 	battle_discard.append(card_id)
-	battle_hand.remove_at(index)
 	_animate_played_card(card, card_origin)
 	if battle_opponent_hp <= 0:
 		battle_finished = true
 		battle_won = true
 		battle_feedback_text = "你赢下了牌战。顾言认可了你的读牌能力。"
 	_refresh_battle_ui()
-	if battle_buff_choice_open:
-		_open_buff_choice()
-
-func _open_buff_choice() -> void:
-	if battle_buff_choice_panel == null:
-		return
-	for child in battle_buff_choice_row.get_children():
-		battle_buff_choice_row.remove_child(child)
-		child.queue_free()
-	battle_buff_choice_buttons.clear()
-	battle_buff_choice_title.text = "战术增幅  /  选择一种牌类，临时上限 +%d" % battle_pending_buff_value
-	var choice_types: Array[String] = []
-	for card_id in battle_card_definitions:
-		var card_type := String(battle_card_definitions[card_id]["type"])
-		if card_type != "buff" and not choice_types.has(card_type):
-			choice_types.append(card_type)
-	for card_type in choice_types:
-		var choice_button := Button.new()
-		choice_button.text = "%s  +%d" % [_card_category(card_type), battle_pending_buff_value]
-		choice_button.custom_minimum_size = Vector2(150, 64)
-		choice_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		choice_button.add_theme_font_size_override("font_size", 17)
-		choice_button.add_theme_color_override("font_color", _card_accent(card_type))
-		choice_button.pressed.connect(_choose_buff_type.bind(card_type))
-		battle_buff_choice_row.add_child(choice_button)
-		battle_buff_choice_buttons.append(choice_button)
-	battle_buff_choice_panel.visible = true
-
-func _choose_buff_type(card_type: String) -> void:
-	if not battle_buff_choice_open:
-		return
-	if card_type == "buff" or not _battle_has_card_type(card_type):
-		return
-	battle_type_bonus[card_type] = battle_type_bonus.get(card_type, 0) + battle_pending_buff_value
-	battle_buff_choice_open = false
-	battle_pending_buff_value = 0
-	battle_buff_choice_panel.visible = false
-	battle_feedback_text = "战术增幅已指定「%s」，本回合该类牌可出 %d 张。" % [_card_category(card_type), _battle_type_limit(card_type)]
-	_refresh_battle_ui()
-
-func _battle_has_card_type(card_type: String) -> bool:
-	for card_id in battle_card_definitions:
-		if String(battle_card_definitions[card_id]["type"]) == card_type:
-			return true
-	return false
 
 func _end_battle_turn() -> void:
 	if not battle_panel.visible:
@@ -1199,8 +1138,8 @@ func _end_battle_turn() -> void:
 		battle_turn += 1
 		battle_block = 0
 		battle_weakens_opponent = false
-		battle_type_uses.clear()
-		battle_type_bonus.clear()
+		battle_category_uses.clear()
+		battle_next_action_damage_bonus = 0
 		_draw_battle_cards_to_five()
 	_refresh_battle_ui()
 
@@ -1213,12 +1152,8 @@ func _close_battle() -> void:
 	battle_hand.clear()
 	battle_deck.clear()
 	battle_discard.clear()
-	battle_type_uses.clear()
-	battle_type_bonus.clear()
-	battle_buff_choice_open = false
-	battle_pending_buff_value = 0
-	if battle_buff_choice_panel != null:
-		battle_buff_choice_panel.visible = false
+	battle_category_uses.clear()
+	battle_next_action_damage_bonus = 0
 
 func _refresh_battle_ui() -> void:
 	if battle_panel == null or not battle_panel.visible:
@@ -1236,7 +1171,7 @@ func _refresh_battle_ui() -> void:
 		battle_intent.text = "⚠ 顾言准备普通击打   ·   预计造成 8 点伤害   ·   旋球扰乱可降低至 4 点"
 	battle_feedback.text = battle_feedback_text
 	battle_end_button.text = "离开牌战" if battle_finished else "结束回合"
-	battle_end_button.disabled = battle_buff_choice_open
+	battle_end_button.disabled = false
 	for index in range(battle_card_buttons.size()):
 		var button := battle_card_buttons[index]
 		if index < battle_hand.size():
@@ -1245,13 +1180,13 @@ func _refresh_battle_ui() -> void:
 			var card_type := String(card["type"])
 			var category := _card_category(card_type)
 			var accent := _card_accent(card_type)
-			var used_count: int = battle_type_uses.get(card_type, 0)
+			var used_count: int = battle_category_uses.get(card_type, 0)
 			var widgets: Dictionary = battle_card_widgets[index]
 			var category_label: Label = widgets["category"]
 			category_label.text = category.to_upper()
 			category_label.add_theme_color_override("font_color", accent)
 			var limit_label: Label = widgets["limit"]
-			var type_limit := _battle_type_limit(card_type)
+			var type_limit := BATTLE_CARD_TYPE_LIMIT
 			limit_label.text = "%d / %d" % [used_count, type_limit]
 			limit_label.add_theme_color_override("font_color", accent if used_count < type_limit else Color("#64748b"))
 			var name_label: Label = widgets["name"]
@@ -1270,7 +1205,7 @@ func _refresh_battle_ui() -> void:
 			button.add_theme_stylebox_override("normal", _battle_card_style(Color("#202c42"), Color(accent, 0.75)))
 			button.add_theme_stylebox_override("hover", _battle_card_style(Color("#2a3a56"), accent))
 			button.add_theme_stylebox_override("pressed", _battle_card_style(Color("#151f32"), accent))
-			button.disabled = battle_finished or battle_buff_choice_open or used_count >= type_limit
+			button.disabled = battle_finished or used_count >= type_limit
 			button.modulate = Color("#64748b") if button.disabled else Color.WHITE
 		else:
 			var empty_widgets: Dictionary = battle_card_widgets[index]
@@ -1303,48 +1238,45 @@ func _battle_type_limit_summary() -> String:
 			type_order.append(card_type)
 	var summary: Array[String] = []
 	for card_type in type_order:
-		summary.append("%s %d/%d" % [_card_category(card_type), battle_type_uses.get(card_type, 0), _battle_type_limit(card_type)])
+		summary.append("%s %d/%d" % [_card_category(card_type), battle_category_uses.get(card_type, 0), BATTLE_CARD_TYPE_LIMIT])
 	return "  ·  ".join(summary)
-
-func _battle_type_limit(card_type: String) -> int:
-	return BATTLE_CARD_TYPE_LIMIT + int(battle_type_bonus.get(card_type, 0))
 
 func _card_category(card_type: String) -> String:
 	match card_type:
-		"damage":
-			return "攻击"
-		"block":
+		"action":
+			return "行动"
+		"defense":
 			return "防御"
-		"disrupt":
-			return "干扰"
-		"buff":
-			return "增益"
+		"resource":
+			return "资源"
+		"tactic":
+			return "战术"
 		_:
 			return card_type
 
 func _card_accent(card_type: String) -> Color:
 	match card_type:
-		"damage":
+		"action":
 			return Color("#f87171")
-		"block":
+		"defense":
 			return Color("#5eead4")
-		"disrupt":
+		"resource":
+			return Color("#60a5fa")
+		"tactic":
 			return Color("#c4b5fd")
-		"buff":
-			return Color("#fbbf24")
 		_:
 			return Color("#fbbf24")
 
 func _card_symbol(card_type: String) -> String:
 	match card_type:
-		"damage":
+		"action":
 			return "▲"
-		"block":
+		"defense":
 			return "◇"
-		"disrupt":
+		"resource":
+			return "＋"
+		"tactic":
 			return "✦"
-		"buff":
-			return "✧"
 		_:
 			return "•"
 
