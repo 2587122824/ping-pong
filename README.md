@@ -29,6 +29,12 @@
 
 左上角紧凑状态 HUD 和牌战 UI 会显示生命、魔法与经验。生命初始 30，战斗间不会自动回满；每次胜利获得 25 点经验，每 100 点经验升一级。魔法初始 10，目前没有卡牌消耗魔法。
 
+升级会获得 1 个技能点。背包 HUD 中的“技能树”可解锁四种被动技能：行动伤害 +1、战斗开始格挡 +2、战斗外治疗 +2、战术增幅 +1；其中两个技能有前置节点。技能状态目前不保存，重启原型后会重置。运行技能树冒烟测试：
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_skills.gd
+```
+
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_battle.gd
 ```

@@ -26,6 +26,10 @@ var equipment_button: Button
 var equipment_panel: Panel
 var equipment_summary: Label
 var equipment_slot_widgets: Dictionary = {}
+var skill_tree_button: Button
+var skill_tree_panel: Panel
+var skill_tree_summary: Label
+var skill_tree_rows: VBoxContainer
 var player_status_hud: Panel
 var player_level_label: Label
 var player_hp_label: Label
@@ -81,6 +85,8 @@ var battle_opponent_hp := 30
 var player_mana := PLAYER_MAX_MANA
 var player_xp := 0
 var player_level := 1
+var player_skill_points := 0
+var unlocked_skills: Dictionary = {}
 var battle_block := 0
 var battle_turn := 1
 var battle_weakens_opponent := false
@@ -105,6 +111,13 @@ var battle_card_definitions := {
 var equipment_slots := {"weapon": "starter_racket", "clothes": "", "shoes": "", "hat": ""}
 var equipment_definitions := {
 	"starter_racket": {"name": "训练球拍", "slot": "weapon", "attack": 2, "description": "主角的基础武器。攻击行动牌额外造成 2 点伤害。"}
+}
+var skill_tree_order: Array[String] = ["racket_calibration", "read_intent", "field_routine", "tactical_memory"]
+var skill_definitions := {
+	"racket_calibration": {"name": "拍面校准", "branch": "战斗", "cost": 1, "requires": [], "effect": "action_damage_bonus", "value": 1, "description": "攻击和干扰行动牌伤害 +1。"},
+	"read_intent": {"name": "意图预判", "branch": "战斗", "cost": 1, "requires": ["racket_calibration"], "effect": "start_block", "value": 2, "description": "每场牌战开始时获得 2 点格挡。"},
+	"field_routine": {"name": "现场急救", "branch": "生存", "cost": 1, "requires": [], "effect": "heal_bonus", "value": 2, "description": "战斗外使用治疗物品时额外恢复 2 点生命。"},
+	"tactical_memory": {"name": "战术记忆", "branch": "战术", "cost": 1, "requires": ["read_intent"], "effect": "tactic_bonus", "value": 1, "description": "战术增幅使下一张行动牌额外 +1 伤害。"}
 }
 var money := 120
 var inventory := {
@@ -196,6 +209,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_close_battle()
 			elif equipment_panel != null and equipment_panel.visible:
 				equipment_panel.visible = false
+			elif skill_tree_panel != null and skill_tree_panel.visible:
+				skill_tree_panel.visible = false
 			elif deck_view_panel != null and deck_view_panel.visible:
 				deck_view_panel.visible = false
 			elif codex_panel != null and codex_panel.visible:
@@ -402,7 +417,7 @@ func _setup_ui() -> void:
 
 	economy_hud = Panel.new()
 	economy_hud.position = Vector2(900, 32)
-	economy_hud.size = Vector2(350, 430)
+	economy_hud.size = Vector2(350, 474)
 	var hud_style := StyleBoxFlat.new()
 	hud_style.bg_color = Color(0.025, 0.06, 0.11, 0.88)
 	hud_style.border_color = Color("#47718c")
@@ -471,6 +486,13 @@ func _setup_ui() -> void:
 	equipment_button.add_theme_font_size_override("font_size", 16)
 	equipment_button.pressed.connect(_open_equipment)
 	economy_hud.add_child(equipment_button)
+	skill_tree_button = Button.new()
+	skill_tree_button.position = Vector2(16, 414)
+	skill_tree_button.size = Vector2(318, 42)
+	skill_tree_button.text = "技能树  ·  %d 点可用" % player_skill_points
+	skill_tree_button.add_theme_font_size_override("font_size", 16)
+	skill_tree_button.pressed.connect(_open_skill_tree)
+	economy_hud.add_child(skill_tree_button)
 
 	shop_panel = Panel.new()
 	shop_panel.position = Vector2(60, 150)
@@ -526,6 +548,7 @@ func _setup_ui() -> void:
 	shop_panel.add_child(close_hint)
 	_setup_deck_and_codex_ui(layer)
 	_setup_equipment_ui(layer)
+	_setup_skill_tree_ui(layer)
 	_setup_battle_ui(layer)
 
 	_refresh_economy_hud()
@@ -637,13 +660,17 @@ func _refresh_player_status_hud() -> void:
 	player_xp_label.tooltip_text = "升级经验进度"
 	player_xp_bar.value = player_xp
 	player_xp_value.text = "%d / %d" % [player_xp, XP_PER_LEVEL]
+	if skill_tree_button != null:
+		skill_tree_button.text = "技能树  ·  %d 点可用" % player_skill_points
 
 func _grant_battle_victory_xp() -> void:
 	player_xp += BATTLE_VICTORY_XP
 	while player_xp >= XP_PER_LEVEL:
 		player_xp -= XP_PER_LEVEL
 		player_level += 1
+		player_skill_points += 1
 	_refresh_player_status_hud()
+	_refresh_skill_tree()
 
 func _setup_deck_and_codex_ui(layer: CanvasLayer) -> void:
 	deck_view_panel = _make_collection_panel(Vector2(290, 94), Vector2(700, 532), Color("#35d0c2"))
@@ -764,10 +791,140 @@ func _get_weapon_attack() -> int:
 		return 0
 	return int(equipment_definitions[weapon_id].get("attack", 0))
 
+func _setup_skill_tree_ui(layer: CanvasLayer) -> void:
+	skill_tree_panel = _make_collection_panel(Vector2(245, 70), Vector2(760, 560), Color("#8b9cf6"))
+	skill_tree_panel.visible = false
+	layer.add_child(skill_tree_panel)
+	var title := _make_collection_title("技能树", Color("#c4b5fd"))
+	skill_tree_panel.add_child(title)
+	skill_tree_summary = Label.new()
+	skill_tree_summary.position = Vector2(30, 64)
+	skill_tree_summary.size = Vector2(700, 32)
+	skill_tree_summary.add_theme_font_size_override("font_size", 17)
+	skill_tree_summary.add_theme_color_override("font_color", Color("#c8d5e4"))
+	skill_tree_panel.add_child(skill_tree_summary)
+	skill_tree_rows = VBoxContainer.new()
+	skill_tree_rows.position = Vector2(30, 112)
+	skill_tree_rows.size = Vector2(700, 330)
+	skill_tree_rows.add_theme_constant_override("separation", 10)
+	skill_tree_panel.add_child(skill_tree_rows)
+	var hint := Label.new()
+	hint.position = Vector2(30, 458)
+	hint.size = Vector2(700, 28)
+	hint.text = "升级获得技能点；节点必须满足前置条件后才能解锁。"
+	hint.add_theme_font_size_override("font_size", 14)
+	hint.add_theme_color_override("font_color", Color("#8fa3b8"))
+	skill_tree_panel.add_child(hint)
+	var close_button := _make_collection_close_button()
+	close_button.position = Vector2(570, 500)
+	close_button.pressed.connect(func(): skill_tree_panel.visible = false)
+	skill_tree_panel.add_child(close_button)
+	_refresh_skill_tree()
+
+func _open_skill_tree() -> void:
+	if battle_panel != null and battle_panel.visible:
+		return
+	deck_view_panel.visible = false
+	codex_panel.visible = false
+	equipment_panel.visible = false
+	_refresh_skill_tree()
+	skill_tree_panel.visible = true
+
+func _refresh_skill_tree() -> void:
+	if skill_tree_rows == null:
+		return
+	_clear_collection_rows(skill_tree_rows)
+	skill_tree_summary.text = "可用技能点：%d  ·  已解锁：%d / %d" % [player_skill_points, unlocked_skills.size(), skill_tree_definitions_count()]
+	for skill_id in skill_tree_order:
+		var skill: Dictionary = skill_definitions[skill_id]
+		var row := Panel.new()
+		row.custom_minimum_size = Vector2(700, 72)
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color("#151e30") if _skill_is_unlocked(skill_id) else Color("#101827")
+		style.border_color = Color("#9b8ff5") if _skill_is_unlocked(skill_id) else Color("#35445b")
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(7)
+		row.add_theme_stylebox_override("panel", style)
+		var name_label := Label.new()
+		name_label.position = Vector2(16, 10)
+		name_label.size = Vector2(270, 25)
+		name_label.text = "%s  ·  %s" % [skill["name"], skill["branch"]]
+		name_label.add_theme_font_size_override("font_size", 17)
+		name_label.add_theme_color_override("font_color", Color("#f1f5f9"))
+		row.add_child(name_label)
+		var description := Label.new()
+		description.position = Vector2(16, 38)
+		description.size = Vector2(490, 25)
+		description.text = _skill_description_with_prerequisites(skill_id)
+		description.add_theme_font_size_override("font_size", 14)
+		description.add_theme_color_override("font_color", Color("#aebbd0"))
+		row.add_child(description)
+		var unlock_button := Button.new()
+		unlock_button.position = Vector2(540, 17)
+		unlock_button.size = Vector2(142, 38)
+		unlock_button.add_theme_font_size_override("font_size", 14)
+		if _skill_is_unlocked(skill_id):
+			unlock_button.text = "已解锁"
+			unlock_button.disabled = true
+		elif _can_unlock_skill(skill_id):
+			unlock_button.text = "解锁  ·  %d 点" % int(skill["cost"])
+			unlock_button.pressed.connect(_unlock_skill.bind(skill_id))
+		else:
+			unlock_button.text = "需要前置"
+			unlock_button.disabled = true
+		row.add_child(unlock_button)
+		skill_tree_rows.add_child(row)
+	if skill_tree_button != null:
+		skill_tree_button.text = "技能树  ·  %d 点可用" % player_skill_points
+
+func skill_tree_definitions_count() -> int:
+	return skill_definitions.size()
+
+func _skill_is_unlocked(skill_id: String) -> bool:
+	return unlocked_skills.get(skill_id, false)
+
+func _can_unlock_skill(skill_id: String) -> bool:
+	if not skill_definitions.has(skill_id) or _skill_is_unlocked(skill_id):
+		return false
+	var skill: Dictionary = skill_definitions[skill_id]
+	if player_skill_points < int(skill["cost"]):
+		return false
+	for required_id in skill["requires"]:
+		if not _skill_is_unlocked(required_id):
+			return false
+	return true
+
+func _unlock_skill(skill_id: String) -> void:
+	if not _can_unlock_skill(skill_id):
+		return
+	var skill: Dictionary = skill_definitions[skill_id]
+	player_skill_points -= int(skill["cost"])
+	unlocked_skills[skill_id] = true
+	_refresh_skill_tree()
+	_refresh_player_status_hud()
+
+func _skill_description_with_prerequisites(skill_id: String) -> String:
+	var skill: Dictionary = skill_definitions[skill_id]
+	var requirements: Array = skill["requires"]
+	if requirements.is_empty():
+		return String(skill["description"])
+	var names: Array[String] = []
+	for required_id in requirements:
+		names.append(String(skill_definitions[required_id]["name"]))
+	return "%s  ·  前置：%s" % [skill["description"], "、".join(names)]
+
+func _get_skill_bonus(effect: String) -> int:
+	var total := 0
+	for skill_id in unlocked_skills:
+		var skill: Dictionary = skill_definitions.get(skill_id, {})
+		if skill.get("effect", "") == effect:
+			total += int(skill.get("value", 0))
+	return total
+
 func _card_display_description(card: Dictionary) -> String:
 	var effect := String(card.get("effect", ""))
 	if String(card.get("type", "")) == "action" and effect in ["damage", "disrupt"]:
-		return "%s  ·  当前武器 +%d" % [card["description"], _get_weapon_attack()]
+		return "%s  ·  武器 +%d / 技能 +%d" % [card["description"], _get_weapon_attack(), _get_skill_bonus("action_damage_bonus")]
 	return String(card["description"])
 
 func _make_collection_panel(position: Vector2, size: Vector2, accent: Color) -> Panel:
@@ -1226,7 +1383,7 @@ func _close_dialogue() -> void:
 	dialogue_panel.visible = false
 
 func _is_modal_open() -> bool:
-	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible)
+	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible) or (skill_tree_panel != null and skill_tree_panel.visible)
 
 func _enter_gate() -> void:
 	var error := get_tree().change_scene_to_file("res://TransitRoom.tscn")
@@ -1238,6 +1395,7 @@ func _toggle_inventory() -> void:
 		deck_view_panel.visible = false
 		codex_panel.visible = false
 		equipment_panel.visible = false
+		skill_tree_panel.visible = false
 	economy_hud.visible = not economy_hud.visible
 
 func _open_shop(npc: Node3D) -> void:
@@ -1354,7 +1512,8 @@ func _use_item(item_id: String) -> void:
 		inventory_feedback.text = "生命值已满，不需要使用医疗用品。"
 		return
 	var old_hp := battle_player_hp
-	battle_player_hp = mini(PLAYER_MAX_HP, battle_player_hp + item["value"])
+	var healing_amount: int = int(item["value"]) + _get_skill_bonus("heal_bonus")
+	battle_player_hp = mini(PLAYER_MAX_HP, battle_player_hp + healing_amount)
 	inventory[item_id] -= 1
 	_refresh_player_status_hud()
 	_refresh_economy_hud()
@@ -1372,7 +1531,7 @@ func _start_battle(npc: Node3D) -> void:
 	_close_shop()
 	battle_opponent = npc
 	battle_opponent_hp = 30
-	battle_block = 0
+	battle_block = _get_skill_bonus("start_block")
 	battle_turn = 1
 	battle_weakens_opponent = false
 	battle_finished = false
@@ -1435,6 +1594,7 @@ func _play_battle_card(index: int) -> void:
 			var action_value: int = card["value"]
 			if effect in ["damage", "disrupt"]:
 				action_value += _get_weapon_attack()
+				action_value += _get_skill_bonus("action_damage_bonus")
 			action_value += battle_next_action_damage_bonus
 			battle_next_action_damage_bonus = 0
 			if effect == "damage":
@@ -1450,8 +1610,9 @@ func _play_battle_card(index: int) -> void:
 			battle_block += card["value"]
 			battle_feedback_text = "你使用「%s」，获得 %d 点格挡。" % [card["name"], card["value"]]
 		"tactic":
-			battle_next_action_damage_bonus += card["value"]
-			battle_feedback_text = "你使用「%s」，下一张行动牌伤害 +%d。" % [card["name"], card["value"]]
+			var tactic_bonus: int = int(card["value"]) + _get_skill_bonus("tactic_bonus")
+			battle_next_action_damage_bonus += tactic_bonus
+			battle_feedback_text = "你使用「%s」，下一张行动牌伤害 +%d。" % [card["name"], tactic_bonus]
 		"resource":
 			var actual_draw_count := _draw_battle_cards(card["value"])
 			battle_feedback_text = "你使用「%s」，抽取 %d 张牌。" % [card["name"], actual_draw_count]
