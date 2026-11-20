@@ -21,9 +21,12 @@ func _run() -> void:
 	assert(game.battle_hand.size() == 5, "A battle should start with five cards")
 	assert(game.battle_card_widgets.size() == 5, "The battle should create five structured card faces")
 	assert(game.battle_animation_layer != null, "The battle should create a card animation layer")
-	assert(game.player_status_3d != null, "The player should have a world-space status panel")
+	assert(game.player_status_hud != null, "The player should have a screen status HUD")
+	assert(game.player_status_hud.size == Vector2(300, 122), "The status HUD should use the compact layout")
 	assert(game.player_hp_bar.value == 30, "The HUD should display player health")
 	assert(game.player_mana_bar.value == game.PLAYER_MAX_MANA, "The HUD should display player mana")
+	assert(game.player_hp_value.text == "30 / 30", "The HUD should display the health value")
+	assert(game.player_mana_value.text == "10 / 10", "The HUD should display the mana value")
 	game.battle_hand.clear()
 	for test_card in ["forehand", "backhand", "guard", "curve", "boost", "recycle"]:
 		game.battle_hand.append({"id": test_card})
