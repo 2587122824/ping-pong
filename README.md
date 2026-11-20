@@ -17,10 +17,11 @@
 
 安装 Godot 4.7.x 标准版后导入 `prototype/project.godot` 并运行。Windows 本地默认安装路径为 `%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。使用 `WASD` 移动，靠近 NPC 后按 `E` 对话；靠近任一场景的“区域传送门”后按 `E`，会立即在测试区和“中转庭院”之间来回传送，传送后角色会出现在目标门旁。
 
-靠近商人阿铎后按 `E` 打开商店，可购买或出售物品；右上角显示金钱和物品数量，按 `I` 隐藏或显示背包。运行交易冒烟测试：
+靠近商人阿铎后按 `E` 打开商店，可购买或出售物品；右侧 3×3 背包格按 `I` 隐藏或显示，同类物品会叠加数量。点击能量饮料、急救贴或创伤包可分别恢复 6、10、18 点生命；满血和牌战中不能使用。运行交易与背包冒烟测试：
 
 ```powershell
 & "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_trade.gd
+& "$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe" --headless --path prototype --script res://tests/smoke_inventory.gd
 ```
 
 靠近顾言后按 `E` 开始牌战。牌分为行动、防御、资源、战术四类，每回合每类最多打出 1 张；正手、反手和旋球扰乱共享行动额度。战术增幅会强化下一张行动牌伤害 +3；数据回收抽 1 张牌且手牌不超过 5 张。结束回合结算对手攻击后补齐手牌到 5 张。当前固定测试牌组为 14 张、六种卡牌。卡牌采用独立牌面展示，并带有抽牌、出牌、洗牌和悬停动画。运行牌战冒烟测试：

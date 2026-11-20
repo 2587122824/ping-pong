@@ -37,6 +37,7 @@
 - 原型两个场景中的双向即时传送门，传送后落在目标门旁。
 - 用户提出将游戏做成卡牌对战，并要求先制作第一版；当前以单 NPC、固定牌组验证回合制攻防循环，不视为最终品类已定。卡牌分行动、防御、资源、战术四类，每回合每类最多打出 1 张；行动类攻击与干扰共享额度。战术增幅强化下一张行动牌伤害 +3，资源牌“数据回收”抽 1 张。
 - 玩家状态面板采用左上角紧凑屏幕 HUD，显示生命、魔法和经验；生命初始 30 且战斗间保留，胜利获得 25 经验、每 100 经验升一级。魔法初始 10，目前没有消耗魔法的卡牌。
+- 背包已改为右侧 3×3 格子 HUD，同种物品按数量叠加；能量饮料、急救贴、创伤包分别恢复 6、10、18 点生命，只能在牌战外使用。背包初始容量 9 格，测试物品共五种。
 - 独立未来文明模拟 v0.1 中的 2148 年、历史分叉、技术边界、智能主体和政治结构。
 
 当前候选世界详见：
@@ -59,7 +60,7 @@
 
 ## 运行状态
 
-本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描、`tests/smoke_collection.gd` 牌组/图鉴测试、`tests/smoke_battle.gd` 牌战测试、`tests/smoke_trade.gd` 交易测试和 `tests/smoke_gate.gd` 双向即时传送测试；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
+本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描、`tests/smoke_collection.gd` 牌组/图鉴测试、`tests/smoke_battle.gd` 牌战测试、`tests/smoke_trade.gd` 交易测试、`tests/smoke_inventory.gd` 格子背包与治疗物品测试和 `tests/smoke_gate.gd` 双向即时传送测试；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
 
 ## 下一步
 

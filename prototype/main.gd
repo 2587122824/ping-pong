@@ -18,6 +18,9 @@ var dialogue_text: Label
 var interaction_hint: Label
 var economy_hud: Panel
 var economy_text: Label
+var inventory_grid: GridContainer
+var inventory_slots: Array[Button] = []
+var inventory_feedback: Label
 var player_status_hud: Panel
 var player_level_label: Label
 var player_hp_label: Label
@@ -97,14 +100,18 @@ var battle_card_definitions := {
 var money := 120
 var inventory := {
 	"energy_drink": 1,
+	"med_patch": 1,
+	"trauma_kit": 0,
 	"data_chip": 0,
 	"repair_kit": 1
 }
 
 var shop_items := [
-	{"id": "energy_drink", "name": "能量饮料", "buy": 20, "sell": 10, "description": "恢复状态的便携饮品"},
-	{"id": "data_chip", "name": "数据芯片", "buy": 35, "sell": 18, "description": "存有城市接口资料"},
-	{"id": "repair_kit", "name": "维修工具包", "buy": 28, "sell": 14, "description": "常见设备维修材料"}
+	{"id": "energy_drink", "name": "能量饮料", "buy": 20, "sell": 10, "description": "恢复 6 点生命值的便携饮品", "effect": "heal", "value": 6, "color": Color("#fb7185")},
+	{"id": "med_patch", "name": "急救贴", "buy": 32, "sell": 16, "description": "恢复 10 点生命值", "effect": "heal", "value": 10, "color": Color("#f97316")},
+	{"id": "trauma_kit", "name": "创伤包", "buy": 58, "sell": 29, "description": "恢复 18 点生命值", "effect": "heal", "value": 18, "color": Color("#ef4444")},
+	{"id": "data_chip", "name": "数据芯片", "buy": 35, "sell": 18, "description": "存有城市接口资料", "effect": "none", "value": 0, "color": Color("#60a5fa")},
+	{"id": "repair_kit", "name": "维修工具包", "buy": 28, "sell": 14, "description": "常见设备维修材料", "effect": "none", "value": 0, "color": Color("#fbbf24")}
 ]
 
 var npcs := [
@@ -383,8 +390,8 @@ func _setup_ui() -> void:
 	dialogue_panel.add_child(dialogue_text)
 
 	economy_hud = Panel.new()
-	economy_hud.position = Vector2(930, 32)
-	economy_hud.size = Vector2(310, 260)
+	economy_hud.position = Vector2(900, 32)
+	economy_hud.size = Vector2(350, 430)
 	var hud_style := StyleBoxFlat.new()
 	hud_style.bg_color = Color(0.025, 0.06, 0.11, 0.88)
 	hud_style.border_color = Color("#47718c")
@@ -394,30 +401,62 @@ func _setup_ui() -> void:
 	layer.add_child(economy_hud)
 
 	economy_text = Label.new()
-	economy_text.position = Vector2(18, 14)
-	economy_text.size = Vector2(274, 174)
-	economy_text.add_theme_font_size_override("font_size", 19)
+	economy_text.position = Vector2(16, 12)
+	economy_text.size = Vector2(318, 44)
+	economy_text.add_theme_font_size_override("font_size", 16)
 	economy_text.add_theme_color_override("font_color", Color("#edf7ff"))
 	economy_hud.add_child(economy_text)
 
+	inventory_grid = GridContainer.new()
+	inventory_grid.position = Vector2(14, 66)
+	inventory_grid.size = Vector2(322, 220)
+	inventory_grid.columns = 3
+	inventory_grid.add_theme_constant_override("h_separation", 8)
+	inventory_grid.add_theme_constant_override("v_separation", 8)
+	economy_hud.add_child(inventory_grid)
+	for item_index in range(9):
+		var slot := Button.new()
+		slot.custom_minimum_size = Vector2(102, 68)
+		slot.add_theme_font_size_override("font_size", 13)
+		slot.add_theme_color_override("font_color", Color("#edf7ff"))
+		slot.add_theme_color_override("font_disabled_color", Color("#697887"))
+		slot.add_theme_stylebox_override("normal", _make_inventory_slot_style(Color("#172635"), Color("#31495c")))
+		slot.add_theme_stylebox_override("hover", _make_inventory_slot_style(Color("#20394b"), Color("#56b6bd")))
+		slot.add_theme_stylebox_override("pressed", _make_inventory_slot_style(Color("#254455"), Color("#78d6d2")))
+		slot.add_theme_stylebox_override("disabled", _make_inventory_slot_style(Color("#111a23"), Color("#24313b")))
+		inventory_grid.add_child(slot)
+		inventory_slots.append(slot)
+		if item_index < shop_items.size():
+			slot.pressed.connect(_use_item.bind(shop_items[item_index]["id"]))
+		slot.disabled = true
+
+	inventory_feedback = Label.new()
+	inventory_feedback.position = Vector2(16, 294)
+	inventory_feedback.size = Vector2(318, 46)
+	inventory_feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inventory_feedback.add_theme_font_size_override("font_size", 14)
+	inventory_feedback.add_theme_color_override("font_color", Color("#a9bfd1"))
+	inventory_feedback.text = "医疗用品可在牌战外使用"
+	economy_hud.add_child(inventory_feedback)
+
 	deck_view_button = Button.new()
-	deck_view_button.position = Vector2(18, 196)
-	deck_view_button.size = Vector2(130, 40)
+	deck_view_button.position = Vector2(16, 366)
+	deck_view_button.size = Vector2(150, 42)
 	deck_view_button.text = "牌组"
 	deck_view_button.add_theme_font_size_override("font_size", 16)
 	deck_view_button.pressed.connect(_open_deck_view)
 	economy_hud.add_child(deck_view_button)
 	codex_button = Button.new()
-	codex_button.position = Vector2(162, 196)
-	codex_button.size = Vector2(130, 40)
+	codex_button.position = Vector2(184, 366)
+	codex_button.size = Vector2(150, 42)
 	codex_button.text = "卡牌图鉴"
 	codex_button.add_theme_font_size_override("font_size", 16)
 	codex_button.pressed.connect(_open_codex)
 	economy_hud.add_child(codex_button)
 
 	shop_panel = Panel.new()
-	shop_panel.position = Vector2(60, 290)
-	shop_panel.size = Vector2(1160, 365)
+	shop_panel.position = Vector2(60, 150)
+	shop_panel.size = Vector2(1160, 500)
 	shop_panel.visible = false
 	var shop_style := StyleBoxFlat.new()
 	shop_style.bg_color = Color(0.025, 0.06, 0.11, 0.97)
@@ -443,7 +482,7 @@ func _setup_ui() -> void:
 
 	var columns := HBoxContainer.new()
 	columns.position = Vector2(24, 62)
-	columns.size = Vector2(1110, 235)
+	columns.size = Vector2(1110, 350)
 	columns.add_theme_constant_override("separation", 24)
 	shop_panel.add_child(columns)
 
@@ -453,14 +492,14 @@ func _setup_ui() -> void:
 	columns.add_child(shop_rows)
 
 	shop_feedback = Label.new()
-	shop_feedback.position = Vector2(24, 310)
+	shop_feedback.position = Vector2(24, 430)
 	shop_feedback.size = Vector2(850, 34)
 	shop_feedback.add_theme_font_size_override("font_size", 18)
 	shop_feedback.add_theme_color_override("font_color", Color("#9ee8d7"))
 	shop_panel.add_child(shop_feedback)
 
 	var close_hint := Label.new()
-	close_hint.position = Vector2(900, 310)
+	close_hint.position = Vector2(900, 430)
 	close_hint.size = Vector2(230, 34)
 	close_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	close_hint.text = "[Esc] 关闭商店"
@@ -471,6 +510,7 @@ func _setup_ui() -> void:
 	_setup_battle_ui(layer)
 
 	_refresh_economy_hud()
+	_refresh_inventory_grid()
 	_refresh_player_status_hud()
 
 func _setup_player_status_hud(layer: CanvasLayer) -> void:
@@ -549,6 +589,18 @@ func _make_status_bar(max_value: int, fill_color: Color) -> ProgressBar:
 	bar.add_theme_stylebox_override("background", background)
 	bar.add_theme_stylebox_override("fill", fill)
 	return bar
+
+func _make_inventory_slot_style(fill_color: Color, border_color: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill_color
+	style.border_color = border_color
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 3
+	style.content_margin_right = 3
+	style.content_margin_top = 3
+	style.content_margin_bottom = 3
+	return style
 
 func _refresh_player_status_hud() -> void:
 	if player_hp_label == null:
@@ -1101,11 +1153,38 @@ func _close_shop() -> void:
 func _refresh_economy_hud() -> void:
 	if economy_text == null:
 		return
-	var lines: Array[String] = ["背包  [I]", "", "金钱：%d 信用点" % money]
+	var occupied_slots := 0
 	for item in shop_items:
+		if inventory.get(item["id"], 0) > 0:
+			occupied_slots += 1
+	economy_text.text = "背包  [I]  ·  %d / 9 格\n信用点  %d" % [occupied_slots, money]
+
+func _refresh_inventory_grid() -> void:
+	if inventory_grid == null:
+		return
+	for index in range(inventory_slots.size()):
+		var slot := inventory_slots[index]
+		if index >= shop_items.size():
+			slot.text = "空格"
+			slot.tooltip_text = "空背包格"
+			slot.disabled = true
+			continue
+		var item: Dictionary = shop_items[index]
 		var count: int = inventory.get(item["id"], 0)
-		lines.append("%s：%d" % [item["name"], count])
-	economy_text.text = "\n".join(lines)
+		if count <= 0:
+			slot.text = "空格"
+			slot.tooltip_text = "空背包格"
+			slot.disabled = true
+			slot.add_theme_stylebox_override("normal", _make_inventory_slot_style(Color("#111a23"), Color("#24313b")))
+			slot.add_theme_stylebox_override("disabled", _make_inventory_slot_style(Color("#111a23"), Color("#24313b")))
+			continue
+		var effect_text := "+%d 生命" % item["value"] if item["effect"] == "heal" else "任务物品"
+		slot.text = "%s\n×%d  ·  %s" % [item["name"], count, effect_text]
+		slot.tooltip_text = "%s\n%s" % [item["name"], item["description"]]
+		slot.disabled = false
+		slot.add_theme_stylebox_override("normal", _make_inventory_slot_style(Color("#172635"), item["color"]))
+		slot.add_theme_stylebox_override("hover", _make_inventory_slot_style(Color("#20394b"), item["color"].lightened(0.25)))
+		slot.add_theme_stylebox_override("pressed", _make_inventory_slot_style(Color("#254455"), item["color"].lightened(0.4)))
 
 func _refresh_shop() -> void:
 	for child in shop_rows.get_children():
@@ -1137,6 +1216,7 @@ func _refresh_shop() -> void:
 		sell_button.pressed.connect(_sell_item.bind(item["id"]))
 		row.add_child(sell_button)
 	_refresh_economy_hud()
+	_refresh_inventory_grid()
 
 func _buy_item(item_id: String) -> void:
 	var item: Dictionary = _get_shop_item(item_id)
@@ -1158,6 +1238,27 @@ func _sell_item(item_id: String) -> void:
 	money += item["sell"]
 	shop_feedback.text = "已出售 %s。" % item["name"]
 	_refresh_shop()
+
+func _use_item(item_id: String) -> void:
+	var item: Dictionary = _get_shop_item(item_id)
+	if item.is_empty() or inventory.get(item_id, 0) <= 0:
+		return
+	if item["effect"] != "heal":
+		inventory_feedback.text = "%s 暂无使用效果。" % item["name"]
+		return
+	if battle_panel != null and battle_panel.visible:
+		inventory_feedback.text = "医疗用品只能在牌战外使用。"
+		return
+	if battle_player_hp >= PLAYER_MAX_HP:
+		inventory_feedback.text = "生命值已满，不需要使用医疗用品。"
+		return
+	var old_hp := battle_player_hp
+	battle_player_hp = mini(PLAYER_MAX_HP, battle_player_hp + item["value"])
+	inventory[item_id] -= 1
+	_refresh_player_status_hud()
+	_refresh_economy_hud()
+	_refresh_inventory_grid()
+	inventory_feedback.text = "%s 生效：生命恢复 %d 点。" % [item["name"], battle_player_hp - old_hp]
 
 func _get_shop_item(item_id: String) -> Dictionary:
 	for item in shop_items:
