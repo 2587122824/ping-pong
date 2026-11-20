@@ -7,6 +7,7 @@
 ## 项目文档
 
 - [产品方向](docs/PRODUCT_DIRECTION.md)
+- [卡牌战斗规则 V0.1](docs/CARD_BATTLE_RULES_V0_1.md)
 - [产品决策记录](docs/DECISION_LOG.md)
 - [未来文明模拟 v0.1](docs/FUTURE_WORLD_SIMULATION_V0_1.md)
 - [项目交接状态](docs/HANDOFF_CONTEXT.md)

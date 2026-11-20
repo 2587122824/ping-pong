@@ -22,6 +22,7 @@
 完整记录见：
 
 - `docs/PRODUCT_DIRECTION.md`
+- 当前牌战规则：`docs/CARD_BATTLE_RULES_V0_1.md`
 - `docs/DECISION_LOG.md`
 
 ## 正在讨论
