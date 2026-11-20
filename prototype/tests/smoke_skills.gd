@@ -8,30 +8,30 @@ func _run() -> void:
 	root.add_child(game)
 	await process_frame
 
-	assert(game.skill_tree_panel != null and game.skill_tree_rows.get_child_count() == 4, "The skill tree should display all four prototype skills")
-	assert(game.player_skill_points == 0, "The player should start without skill points")
-	assert(not game._can_unlock_skill("tactical_memory"), "A skill with unmet prerequisites should not be unlockable")
+	assert(game.talent_panel != null and game.talent_rows.get_child_count() == 4, "The talent panel should display all four prototype talents")
+	assert(game.player_talent_points == 0, "The player should start without talent points")
+	assert(not game._can_unlock_talent("tactical_memory"), "A talent with unmet prerequisites should not be unlockable")
 
 	for _victory in range(4):
 		game._grant_battle_victory_xp()
 	assert(game.player_level == 2, "Four victories should reach the first level threshold")
-	assert(game.player_skill_points == 1, "Leveling up should grant one skill point")
-	assert(game._can_unlock_skill("racket_calibration"), "A root skill should be unlockable after leveling")
-	game._unlock_skill("racket_calibration")
-	assert(game._get_skill_bonus("action_damage_bonus") == 1, "Racket Calibration should add one action damage")
-	assert(not game._can_unlock_skill("read_intent") or game.player_skill_points > 0, "Skill unlocks should respect available points")
+	assert(game.player_talent_points == 1, "Leveling up should grant one talent point")
+	assert(game._can_unlock_talent("racket_calibration"), "A root talent should be unlockable after leveling")
+	game._unlock_talent("racket_calibration")
+	assert(game._get_talent_bonus("action_damage_bonus") == 1, "Racket Calibration should add one action damage")
+	assert(not game._can_unlock_talent("read_intent") or game.player_talent_points > 0, "Talent unlocks should respect available points")
 
 	for _victory in range(16):
 		game._grant_battle_victory_xp()
-	assert(game.player_skill_points == 4, "Each additional level should grant one skill point")
-	assert(game._can_unlock_skill("read_intent"), "The dependent skill should unlock after its prerequisite")
-	game._unlock_skill("read_intent")
-	game._unlock_skill("field_routine")
-	game._unlock_skill("tactical_memory")
-	assert(game.player_skill_points == 1, "Each unlocked skill should spend its configured point cost")
-	assert(game._get_skill_bonus("start_block") == 2, "Intent Reading should grant two opening block")
-	assert(game._get_skill_bonus("heal_bonus") == 2, "Field Routine should improve healing")
-	assert(game._get_skill_bonus("tactic_bonus") == 1, "Tactical Memory should strengthen tactic cards")
+	assert(game.player_talent_points == 4, "Each additional level should grant one talent point")
+	assert(game._can_unlock_talent("read_intent"), "The dependent skill should unlock after its prerequisite")
+	game._unlock_talent("read_intent")
+	game._unlock_talent("field_routine")
+	game._unlock_talent("tactical_memory")
+	assert(game.player_talent_points == 1, "Each unlocked talent should spend its configured point cost")
+	assert(game._get_talent_bonus("start_block") == 2, "Intent Reading should grant two opening block")
+	assert(game._get_talent_bonus("heal_bonus") == 2, "Field Routine should improve healing")
+	assert(game._get_talent_bonus("tactic_bonus") == 1, "Tactical Memory should strengthen tactic cards")
 
 	var challenger: Node3D
 	for child in game.get_children():
@@ -56,5 +56,5 @@ func _run() -> void:
 	assert(game.battle_player_hp == 28, "Field Routine should add two healing to the six-point energy drink")
 	assert(game.inventory["energy_drink"] == 0, "Using a healing item should consume it")
 
-	print("Skill tree smoke test passed")
+	print("Talent smoke test passed")
 	quit()
