@@ -78,6 +78,7 @@ var battle_shuffle_pending := false
 var battle_animation_layer: Control
 var battle_end_button: Button
 var battle_opponent: Node3D
+var formation_battle
 var level_select_panel: Panel
 var level_select_summary: Label
 var level_select_buttons: Dictionary = {}
@@ -275,8 +276,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				_interact_with_npc(nearby_npc)
 		elif event.keycode == KEY_I and not _is_modal_open():
 			_toggle_inventory()
+		elif event.keycode == KEY_F2:
+			if formation_battle != null and formation_battle.visible:
+				_close_formation_battle()
+			elif not _is_modal_open():
+				_open_formation_battle()
 		elif event.keycode == KEY_ESCAPE:
-			if battle_panel != null and battle_panel.visible:
+			if formation_battle != null and formation_battle.visible:
+				_close_formation_battle()
+			elif battle_panel != null and battle_panel.visible:
 				_close_battle()
 			elif level_select_panel != null and level_select_panel.visible:
 				_close_level_select()
@@ -492,7 +500,7 @@ func _setup_ui() -> void:
 
 	economy_hud = Panel.new()
 	economy_hud.position = Vector2(900, 32)
-	economy_hud.size = Vector2(350, 474)
+	economy_hud.size = Vector2(350, 520)
 	var hud_style := StyleBoxFlat.new()
 	hud_style.bg_color = Color(0.025, 0.06, 0.11, 0.88)
 	hud_style.border_color = Color("#47718c")
@@ -568,6 +576,14 @@ func _setup_ui() -> void:
 	talent_button.add_theme_font_size_override("font_size", 16)
 	talent_button.pressed.connect(_open_talent)
 	economy_hud.add_child(talent_button)
+
+	var formation_button := Button.new()
+	formation_button.position = Vector2(16, 462)
+	formation_button.size = Vector2(318, 42)
+	formation_button.text = "阵战原型  [F2]"
+	formation_button.add_theme_font_size_override("font_size", 16)
+	formation_button.pressed.connect(_open_formation_battle)
+	economy_hud.add_child(formation_button)
 
 	shop_panel = Panel.new()
 	shop_panel.position = Vector2(60, 150)
@@ -1607,8 +1623,25 @@ func _open_or_advance_dialogue(npc: Node3D) -> void:
 func _close_dialogue() -> void:
 	dialogue_panel.visible = false
 
+func _open_formation_battle() -> void:
+	if formation_battle != null and is_instance_valid(formation_battle):
+		formation_battle.visible = true
+		return
+	var scene = load("res://formation_battle.tscn")
+	if scene == null:
+		interaction_hint.text = "无法载入阵战原型"
+		return
+	formation_battle = scene.instantiate()
+	formation_battle.close_requested.connect(_close_formation_battle)
+	add_child(formation_battle)
+
+func _close_formation_battle() -> void:
+	if formation_battle != null and is_instance_valid(formation_battle):
+		formation_battle.queue_free()
+	formation_battle = null
+
 func _is_modal_open() -> bool:
-	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (level_select_panel != null and level_select_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible) or (talent_panel != null and talent_panel.visible)
+	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (level_select_panel != null and level_select_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible) or (talent_panel != null and talent_panel.visible) or (formation_battle != null and formation_battle.visible)
 
 func _enter_gate() -> void:
 	var error := get_tree().change_scene_to_file("res://TransitRoom.tscn")
