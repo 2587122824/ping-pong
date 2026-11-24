@@ -30,5 +30,11 @@ func _run() -> void:
 	# 再点一次取消选中
 	battle._on_hand_pressed(0)
 	assert(battle.selected_card == -1, "second click deselects")
+
+	# 引爆触发炸弹爆炸特效，位置归零
+	battle.bombs[0]["pos"] = 2.0
+	battle._detonate(0, "timer")
+	assert(float(battle.bombs[0]["pos"]) == 0.0, "bomb resets after detonation")
+	assert(battle.bomb_views[0].explosion > 0.0, "explosion effect triggered")
 	print("highlight logic ok")
 	quit()

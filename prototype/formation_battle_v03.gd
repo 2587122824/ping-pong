@@ -739,6 +739,8 @@ func _detonate(lane: int, reason: String) -> void:
 		_damage_side("enemy", BASELINE_DAMAGE, "炸弹被推到底线")
 	elif reason == "baseline_player":
 		_damage_side("player", BASELINE_DAMAGE, "炸弹被推到底线")
+	if bomb_views.size() > lane:
+		bomb_views[lane].play_explosion()
 	bomb["pos"] = 0.0
 
 
@@ -812,12 +814,17 @@ func _enemy_slot_for(card_id: String):
 
 # ---------------------------------------------------------------- 界面控件
 
-# 立体炸弹：球体 + 引信 + 半场描边色 + 位置/倒计时文字
+# 立体炸弹：沿轨道按位置实际滑动，引爆播放扩散冲击环 + 闪光
 class BombView:
 	extends Control
 
+	const RANGE := 7.0
+	const TRAVEL := 34.0
+	const BOOM_TIME := 0.6
+
 	var pos := 0.0
 	var timer := 0.0
+	var explosion := 0.0
 	var info: Label
 
 	func _init() -> void:
@@ -836,6 +843,19 @@ class BombView:
 			return Color("#7fe4dd")
 		return Color("#c3d0dc")
 
+	func _bomb_center() -> Vector2:
+		var x := 45.0 + clampf(pos, -RANGE, RANGE) / RANGE * TRAVEL
+		return Vector2(x, 24)
+
+	func play_explosion() -> void:
+		explosion = 1.0
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		if explosion > 0.0:
+			explosion = maxf(0.0, explosion - delta / BOOM_TIME)
+			queue_redraw()
+
 	func set_state(p: float, t: float) -> void:
 		pos = p
 		timer = t
@@ -844,8 +864,15 @@ class BombView:
 		queue_redraw()
 
 	func _draw() -> void:
-		var center := Vector2(45, 24)
+		var center := _bomb_center()
 		var rim := _rim_color()
+		draw_line(Vector2(11, 24), Vector2(79, 24), Color("#1d2f42"), 2)
+		if explosion > 0.0:
+			var t := 1.0 - explosion
+			var er := 12.0 + t * 38.0
+			draw_circle(center, er, Color(1.0, 0.72, 0.25, 0.22 * explosion))
+			draw_arc(center, er, 0, TAU, 28, Color(1.0, 0.5, 0.2, explosion), 3.0)
+			draw_circle(center, 9.0 * explosion, Color(1, 1, 1, 0.8 * explosion))
 		draw_circle(center + Vector2(0, 4), 16, Color(0, 0, 0, 0.35))
 		draw_circle(center, 17, Color("#262c34"))
 		draw_arc(center, 17, 0, TAU, 28, rim, 2.0)
