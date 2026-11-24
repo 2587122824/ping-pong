@@ -45,7 +45,7 @@ func _run() -> void:
 	game.battle_hand.append({"id": "tt_main"})
 	game._play_battle_card(0)
 	assert(game.battle_next_action_damage_bonus == 21, "Tactical Memory should add one damage to Tactical Boost")
-	assert(game.battle_feedback_text.contains("+4"), "Tactical Boost feedback should show the full skill-enhanced value")
+	assert(game.battle_feedback_text.contains("+21"), "Tactical Boost feedback should show the full skill-enhanced value")
 	game._play_battle_card(0)
 	assert(game.battle_opponent_hp == 34, "Racket Calibration and Tactical Memory should reduce the eighty health tutorial opponent by forty-six damage")
 

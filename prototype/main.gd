@@ -1631,12 +1631,11 @@ func _open_formation_battle() -> void:
 	if formation_battle != null and is_instance_valid(formation_battle):
 		formation_battle.visible = true
 		return
-	var scene = load("res://formation_battle.tscn")
+	var scene = load("res://formation_battle_v03.tscn")
 	if scene == null:
 		interaction_hint.text = "无法载入阵战原型"
 		return
 	formation_battle = scene.instantiate()
-	formation_battle.close_requested.connect(_close_formation_battle)
 	add_child(formation_battle)
 
 func _close_formation_battle() -> void:
