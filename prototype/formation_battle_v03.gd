@@ -180,7 +180,7 @@ var level_label: Label
 var hand_bar: HBoxContainer
 var hand_buttons: Array = []
 var slot_buttons := {"player": [], "enemy": []}
-var bomb_labels: Array = []
+var bomb_views: Array = []
 var level_buttons := {}
 var start_button: Button
 var auto_button: Button
@@ -810,6 +810,73 @@ func _enemy_slot_for(card_id: String):
 	return null
 
 
+# ---------------------------------------------------------------- 界面控件
+
+# 立体炸弹：球体 + 引信 + 半场描边色 + 位置/倒计时文字
+class BombView:
+	extends Control
+
+	var pos := 0.0
+	var timer := 0.0
+	var info: Label
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(90, 66)
+		info = Label.new()
+		info.position = Vector2(0, 42)
+		info.size = Vector2(90, 18)
+		info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		info.add_theme_font_size_override("font_size", 11)
+		add_child(info)
+
+	func _rim_color() -> Color:
+		if pos < -0.3:
+			return Color("#fb7185")
+		if pos > 0.3:
+			return Color("#7fe4dd")
+		return Color("#c3d0dc")
+
+	func set_state(p: float, t: float) -> void:
+		pos = p
+		timer = t
+		info.text = "%.1f 格 · %.1fs" % [absf(p), t]
+		info.add_theme_color_override("font_color", _rim_color())
+		queue_redraw()
+
+	func _draw() -> void:
+		var center := Vector2(45, 24)
+		var rim := _rim_color()
+		draw_circle(center + Vector2(0, 4), 16, Color(0, 0, 0, 0.35))
+		draw_circle(center, 17, Color("#262c34"))
+		draw_arc(center, 17, 0, TAU, 28, rim, 2.0)
+		draw_circle(center + Vector2(-5, -6), 5.5, Color("#3d4651"))
+		draw_line(center + Vector2(5, -15), center + Vector2(11, -23), Color("#c9a86a"), 2)
+		draw_circle(center + Vector2(12, -24), 2.5, Color("#fbbf24"))
+		if pos <= -1.0:
+			_draw_chevron(center + Vector2(-27, 0), rim, -1)
+		elif pos >= 1.0:
+			_draw_chevron(center + Vector2(27, 0), rim, 1)
+
+	func _draw_chevron(at: Vector2, color: Color, dir: int) -> void:
+		var pts := PackedVector2Array([at + Vector2(4 * dir, -6), at, at + Vector2(4 * dir, 6)])
+		draw_colored_polygon(pts, color)
+
+
+# 棋盘台面背景：三条车道横带 + 中线炸弹槽，伪纵深底色
+class BoardBg:
+	extends Control
+
+	func _draw() -> void:
+		draw_rect(Rect2(20, 108, 1240, 232), Color("#0d1826"), true)
+		for i in range(3):
+			var y := 116 + i * 74
+			draw_rect(Rect2(28, y, 1224, 68), Color("#122438") if i % 2 == 0 else Color("#0f1e30"), true)
+		draw_rect(Rect2(596, 116, 88, 204), Color("#182a3f"), true)
+		for i in range(1, 3):
+			var y := 116 + i * 74 - 3
+			draw_line(Vector2(28, y), Vector2(1252, y), Color("#22384e"), 1)
+
+
 # ---------------------------------------------------------------- UI
 
 func _build_ui() -> void:
@@ -822,6 +889,9 @@ func _build_ui() -> void:
 	bg.color = Color("#0b1220")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(bg)
+	var board_bg := BoardBg.new()
+	board_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(board_bg)
 
 	var main := VBoxContainer.new()
 	main.position = Vector2(20, 14)
@@ -921,13 +991,9 @@ func _build_ui() -> void:
 			player_slots.append(button)
 		slot_buttons["player"].append(player_slots)
 
-		var bomb_label := Label.new()
-		bomb_label.custom_minimum_size = Vector2(90, 62)
-		bomb_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		bomb_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		bomb_label.add_theme_font_size_override("font_size", 13)
-		lane_row.add_child(bomb_label)
-		bomb_labels.append(bomb_label)
+		var bomb_view := BombView.new()
+		lane_row.add_child(bomb_view)
+		bomb_views.append(bomb_view)
 
 		var e_box := HBoxContainer.new()
 		e_box.add_theme_constant_override("separation", 4)
@@ -1004,9 +1070,11 @@ func _make_bar(max_value: float, color: Color) -> ProgressBar:
 func _zone_header(container: HBoxContainer, side: String) -> void:
 	for col in range(ROWS):
 		var row := ROWS - 1 - col if side == "player" else col
+		var zone := zone_of_row(row)
+		var w := 78 if zone == "near" else (72 if zone == "mid" else 66)
 		var label := Label.new()
-		label.text = ZONE_NAMES[zone_of_row(row)]
-		label.custom_minimum_size = Vector2(74, 18)
+		label.text = ZONE_NAMES[zone]
+		label.custom_minimum_size = Vector2(w, 18)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.add_theme_font_size_override("font_size", 11)
 		label.add_theme_color_override("font_color", Color("#697887"))
@@ -1015,10 +1083,13 @@ func _zone_header(container: HBoxContainer, side: String) -> void:
 
 func _make_slot_button(side: String, lane: int, row: int) -> Button:
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(74, 62)
+	var zone := zone_of_row(row)
+	var size := Vector2(78, 64) if zone == "near" else (Vector2(72, 58) if zone == "mid" else Vector2(66, 52))
+	button.custom_minimum_size = size
 	button.add_theme_font_size_override("font_size", 11)
 	button.clip_text = true
 	button.set_meta("row", row)
+	button.set_meta("zone", zone)
 	button.pressed.connect(_on_slot.bind(side, lane, row))
 	_update_slot(button, null, side)
 	return button
@@ -1038,7 +1109,7 @@ func _on_slot(side: String, lane: int, row: int) -> void:
 func _on_hand_pressed(index: int) -> void:
 	if index >= hand.size():
 		return
-	selected_card = index
+	selected_card = -1 if selected_card == index else index
 	_refresh()
 
 
@@ -1070,18 +1141,13 @@ func _refresh() -> void:
 	for id in level_buttons:
 		level_buttons[id].modulate = Color("#7fe4dd") if String(id) == level_id else Color.WHITE
 	for lane in range(LANES):
-		var bomb: Dictionary = bombs[lane]
-		var pos := float(bomb["pos"])
-		var arrow := "◀ ◀ ◀" if pos <= -1.0 else ("▶ ▶ ▶" if pos >= 1.0 else "◀ ▮ ▶")
-		if pos <= 0.3 and pos >= -0.3:
-			arrow = "─ ▮ ─"
-		bomb_labels[lane].text = "%s\n%.1f 格 · %.1fs" % [arrow, absf(pos), float(bomb["timer"])]
-		bomb_labels[lane].modulate = Color("#fb7185") if pos < -0.3 else (Color("#7fe4dd") if pos > 0.3 else Color("#e3eaf0"))
+		bomb_views[lane].set_state(float(bombs[lane]["pos"]), float(bombs[lane]["timer"]))
 	for lane in range(LANES):
 		for col in range(ROWS):
 			var row := ROWS - 1 - col
 			_update_slot(slot_buttons["player"][lane][col], board["player"][lane][row], "player")
 			_update_slot(slot_buttons["enemy"][lane][col], board["enemy"][lane][col], "enemy")
+	_apply_slot_highlight()
 	for i in range(hand_buttons.size()):
 		var button: Button = hand_buttons[i]
 		if i >= hand.size():
@@ -1126,6 +1192,7 @@ func _phase_text() -> String:
 
 
 func _update_slot(button: Button, unit, side: String) -> void:
+	button.modulate = Color.WHITE
 	if unit == null:
 		var zone := zone_of_row(int(button.get_meta("row", 0)))
 		var tint: Color = {"near": Color("#16324a"), "mid": Color("#132436"), "far": Color("#101a2a")}[zone]
@@ -1141,6 +1208,30 @@ func _update_slot(button: Button, unit, side: String) -> void:
 	button.add_theme_stylebox_override("normal", _flat(type_color.darkened(0.62), type_color, 4))
 	button.add_theme_stylebox_override("hover", _flat(type_color.darkened(0.5), type_color, 4))
 	button.add_theme_color_override("font_color", Color("#f8fafc"))
+
+
+# 选中手牌后：可放置的空槽亮绿，可覆盖的已有单位槽亮琥珀，不符合区域的槽压暗
+func _apply_slot_highlight() -> void:
+	var card_id := ""
+	if selected_card >= 0 and selected_card < hand.size():
+		card_id = String(hand[selected_card])
+	for lane in range(LANES):
+		for col in range(ROWS):
+			var button: Button = slot_buttons["player"][lane][col]
+			var row := ROWS - 1 - col
+			if card_id == "":
+				button.modulate = Color.WHITE
+				continue
+			var unit = board["player"][lane][row]
+			if not card_fits(card_id, row):
+				button.modulate = Color(0.5, 0.5, 0.5)
+				button.add_theme_stylebox_override("normal", _flat(Color("#0e1622"), Color("#1d2a36"), 4))
+			elif unit != null:
+				button.modulate = Color.WHITE
+				button.add_theme_stylebox_override("normal", _flat(Color("#3a2f16"), Color("#fbbf24"), 4))
+			else:
+				button.modulate = Color.WHITE
+				button.add_theme_stylebox_override("normal", _flat(Color("#123a33"), Color("#34d399"), 4))
 
 
 # ---------------------------------------------------------------- 存档点（调试用）

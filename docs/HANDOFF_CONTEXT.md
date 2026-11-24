@@ -84,7 +84,7 @@
 
 ## 运行状态
 
-本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描、`tests/smoke_collection.gd` 牌组/图鉴测试、`tests/smoke_battle.gd` 关卡与牌战测试、`tests/smoke_equipment.gd` 四槽装备与武器属性测试、`tests/smoke_skills.gd` 天赋点、前置条件与效果测试、`tests/smoke_trade.gd` 交易测试、`tests/smoke_inventory.gd` 格子背包与治疗物品测试、`tests/smoke_gate.gd` 双向即时传送测试和 `tests/smoke_formation_v03.gd`（V0.3 去血单位/炸弹推拉/克制/BOSS 能力/生命结算）与 `tests/balance_v03.gd`（V0.3 两 BOSS 平衡探针）和 `tests/smoke_hud.gd`（布阵原型打开/关闭时探索常驻 HUD 收起与恢复）；旧 V0.2 布阵冒烟与探针已随原型删除；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
+本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描、`tests/smoke_collection.gd` 牌组/图鉴测试、`tests/smoke_battle.gd` 关卡与牌战测试、`tests/smoke_equipment.gd` 四槽装备与武器属性测试、`tests/smoke_skills.gd` 天赋点、前置条件与效果测试、`tests/smoke_trade.gd` 交易测试、`tests/smoke_inventory.gd` 格子背包与治疗物品测试、`tests/smoke_gate.gd` 双向即时传送测试和 `tests/smoke_formation_v03.gd`（V0.3 去血单位/炸弹推拉/克制/BOSS 能力/生命结算）与 `tests/balance_v03.gd`（V0.3 两 BOSS 平衡探针）和 `tests/smoke_hud.gd`（布阵原型打开/关闭时探索常驻 HUD 收起与恢复）与 `tests/smoke_highlight.gd`（选牌后可放置槽位三态高亮与取消选中）；旧 V0.2 布阵冒烟与探针已随原型删除；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
 
 ## 下一步
 
