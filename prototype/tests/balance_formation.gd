@@ -29,6 +29,7 @@ func _run() -> void:
 	var battle: Variant = scene.instantiate()
 	battle.auto_tick = false
 	battle.auto_refresh = false
+	battle.ui_enabled = false
 	battle.shuffle_on_reshuffle = true
 	root.add_child(battle)
 	await process_frame

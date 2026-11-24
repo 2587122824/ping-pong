@@ -6,17 +6,17 @@ extends SceneTree
 
 const DECKS := ["vanguard", "aero", "bastion"]
 const LEVELS := ["CH0-01", "CH1-01", "CH1-E01", "CH0-B01", "CH1-S01"]
-const RUNS := 6
+const RUNS := 8
 const MAX_SIM_SECONDS := 130.0
 const STEP := 0.1
 
 const CONFIGS := [
-	{"name": "baseline", "cost": 1.0, "battle_cost": 1.0, "opening": 100, "opening_by_deck": {}, "cooldown": 0.0},
-	{"name": "A_cost125_open80_cd2", "cost": 1.25, "battle_cost": 1.0, "opening": 80, "opening_by_deck": {}, "cooldown": 2.0},
-	{"name": "B_cost125_open80_cd3", "cost": 1.25, "battle_cost": 1.0, "opening": 80, "opening_by_deck": {}, "cooldown": 3.0},
-	{"name": "C_cost150_open70_cd4", "cost": 1.5, "battle_cost": 1.0, "opening": 70, "opening_by_deck": {}, "cooldown": 4.0},
-	{"name": "D_battle15_open_deck_cd2", "cost": 1.0, "battle_cost": 1.5, "opening": 75, "opening_by_deck": {"vanguard": 75, "aero": 85, "bastion": 95}, "cooldown": 2.0},
-	{"name": "E_battle20_open_deck_cd3", "cost": 1.0, "battle_cost": 2.0, "opening": 70, "opening_by_deck": {"vanguard": 70, "aero": 80, "bastion": 90}, "cooldown": 3.0}
+	{"name": "baseline_cost100", "cost": 1.0, "battle_cost": 1.0, "opening": 100, "opening_by_deck": {}, "cooldown": 0.0},
+	{"name": "cost110", "cost": 1.1, "battle_cost": 1.0, "opening": 100, "opening_by_deck": {}, "cooldown": 0.0},
+	{"name": "cost125", "cost": 1.25, "battle_cost": 1.0, "opening": 100, "opening_by_deck": {}, "cooldown": 0.0},
+	{"name": "cost140", "cost": 1.4, "battle_cost": 1.0, "opening": 100, "opening_by_deck": {}, "cooldown": 0.0},
+	{"name": "cost150", "cost": 1.5, "battle_cost": 1.0, "opening": 100, "opening_by_deck": {}, "cooldown": 0.0},
+	{"name": "cost175", "cost": 1.75, "battle_cost": 1.0, "opening": 100, "opening_by_deck": {}, "cooldown": 0.0}
 ]
 
 
@@ -29,6 +29,7 @@ func _run() -> void:
 	var battle: Variant = scene.instantiate()
 	battle.auto_tick = false
 	battle.auto_refresh = false
+	battle.ui_enabled = false
 	battle.shuffle_on_reshuffle = true
 	root.add_child(battle)
 	await process_frame

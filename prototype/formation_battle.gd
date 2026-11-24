@@ -164,6 +164,7 @@ var enemy_characters := {
 var phase := "deploy"
 var auto_tick := true
 var auto_refresh := true
+var ui_enabled := true
 var speed_multiplier := 1.0
 var shuffle_on_reshuffle := true
 
@@ -1005,6 +1006,8 @@ func _set_feedback(text: String, ok: bool) -> void:
 
 
 func _refresh_hand() -> void:
+	if not ui_enabled:
+		return
 	for child in hand_container.get_children():
 		hand_container.remove_child(child)
 		child.queue_free()
@@ -1019,6 +1022,8 @@ func _refresh_hand() -> void:
 
 
 func _refresh_card_states() -> void:
+	if not ui_enabled:
+		return
 	for index in range(card_views.size()):
 		if index >= player_hand.size():
 			continue
@@ -1058,6 +1063,8 @@ func _refresh_level_info() -> void:
 
 
 func _refresh_dynamic_ui() -> void:
+	if not ui_enabled:
+		return
 	if stamina_bar == null:
 		return
 	stamina_bar.max_value = STAMINA_MAX
