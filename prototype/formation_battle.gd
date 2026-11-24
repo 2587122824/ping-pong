@@ -174,6 +174,11 @@ var level_id := "CH1-01"
 var player_deck_id := "vanguard"
 var player_stamina := START_STAMINA
 var enemy_stamina := 0
+var opening_stamina := START_STAMINA
+var card_cost_multiplier := 1.0
+var battle_cost_multiplier := 1.0
+var battle_reinforce_cooldown := 0.0
+var battle_reinforce_ready_at := 0.0
 var player_stamina_timer := 0.0
 var enemy_stamina_timer := 0.0
 var enemy_reinforce_timer := 0.0
@@ -268,8 +273,9 @@ func tick(delta: float) -> void:
 func restart_battle() -> void:
 	phase = "deploy"
 	battle_time = 0.0
-	player_stamina = START_STAMINA
+	player_stamina = mini(opening_stamina, STAMINA_MAX)
 	enemy_stamina = 0
+	battle_reinforce_ready_at = 0.0
 	player_stamina_timer = 0.0
 	enemy_stamina_timer = 0.0
 	enemy_reinforce_timer = 0.0
@@ -360,7 +366,10 @@ func try_deploy(card_id: String, hand_index: int, lane: int, row: int) -> bool:
 		return false
 	if not card_definitions.has(card_id):
 		return false
-	var cost := int(card_definitions[card_id]["cost"])
+	if phase == "battle" and battle_reinforce_cooldown > 0.0 and battle_time < battle_reinforce_ready_at:
+		_set_feedback("补位冷却中：%.1f 秒后才能再补" % max(0.0, battle_reinforce_ready_at - battle_time), false)
+		return false
+	var cost := _card_cost(card_id)
 	if player_stamina < cost:
 		_set_feedback("体力不足：%s 需要 %d，当前 %d" % [
 			String(card_definitions[card_id]["name"]), cost, player_stamina
@@ -371,6 +380,8 @@ func try_deploy(card_id: String, hand_index: int, lane: int, row: int) -> bool:
 	player_hand.remove_at(hand_index)
 	player_stamina -= cost
 	player_discard.append(card_id)
+	if phase == "battle":
+		battle_reinforce_ready_at = battle_time + battle_reinforce_cooldown
 	var new_unit = _create_unit(card_id, "player", lane, row)
 	board["player"][lane][row] = new_unit
 	var action := "部署"
@@ -400,7 +411,7 @@ func select_card(index: int) -> void:
 	else:
 		selected_card_index = index
 		var card_id := String(player_hand[index])
-		var cost := int(card_definitions[card_id]["cost"])
+		var cost := _card_cost(card_id)
 		var suffix := "" if player_stamina >= cost else "（体力不足）"
 		_set_feedback("已选中 %s，点击我方阵位部署%s" % [
 			String(card_definitions[card_id]["name"]), suffix
@@ -468,10 +479,20 @@ func try_move_unit(from_lane: int, from_row: int, to_lane: int, to_row: int) -> 
 	return true
 
 
+func _card_cost(card_id: String) -> int:
+	var base_cost := int(card_definitions[card_id]["cost"])
+	var multiplier := card_cost_multiplier
+	if phase == "battle":
+		multiplier *= battle_cost_multiplier
+	if is_equal_approx(multiplier, 1.0):
+		return base_cost
+	return int(ceil(float(base_cost) * multiplier))
+
+
 func can_afford(card_id: String) -> bool:
 	if not card_definitions.has(card_id):
 		return false
-	return player_stamina >= int(card_definitions[card_id]["cost"])
+	return player_stamina >= _card_cost(card_id)
 
 
 func _simulate(delta: float) -> void:
@@ -880,7 +901,7 @@ func _try_enemy_reinforce() -> void:
 	for offset in range(deck.size()):
 		var index := (enemy_reinforce_index + offset) % deck.size()
 		var card_id := String(deck[index])
-		var cost := int(card_definitions[card_id]["cost"])
+		var cost := _card_cost(card_id)
 		if enemy_stamina < cost:
 			continue
 		var slot = _enemy_choose_slot(card_id)
@@ -982,7 +1003,7 @@ func _refresh_level_info() -> void:
 	var costs: Array = []
 	var total_cost := 0
 	for card_id in cards:
-		var cost := int(card_definitions[card_id]["cost"])
+		var cost := _card_cost(card_id)
 		costs.append(cost)
 		total_cost += cost
 	costs.sort()
@@ -991,9 +1012,9 @@ func _refresh_level_info() -> void:
 		if i >= 9:
 			break
 		fill_total += int(costs[i])
-	var fill_line := "9 格最低铺满：共 %d，剩 %d。" % [fill_total, STAMINA_MAX - fill_total]
-	if fill_total > STAMINA_MAX:
-		fill_line = "9 格最低铺满需 %d，体力不足。" % fill_total
+	var fill_line := "9 格最低铺满：共 %d，剩 %d。" % [fill_total, opening_stamina - fill_total]
+	if fill_total > opening_stamina:
+		fill_line = "9 格最低铺满需 %d，布阵体力不足。" % fill_total
 	level_info_label.text = "关卡：%s\n敌方牌组：%s\n特殊：%s\n\n%s\n\n%s 12 张牌库，总费用 %d。\n%s" % [
 		String(level["name"]),
 		String(deck_definitions[String(level["enemy_deck"])]["short"]),
@@ -1019,6 +1040,9 @@ func _refresh_dynamic_ui() -> void:
 		var hint: String = "下次恢复 %.1fs" % until
 		if _player_has_resource_unit():
 			hint += "\n资源牌按卡面间隔恢复体力（最多 2 个生效）"
+		if battle_reinforce_cooldown > 0.0:
+			var ready_in: float = max(0.0, battle_reinforce_ready_at - battle_time)
+			hint += "\n补位冷却 %.1fs，间隔 %.0fs" % [ready_in, battle_reinforce_cooldown]
 		stamina_hint.text = hint
 	else:
 		stamina_hint.text = "战斗结束"
@@ -1231,7 +1255,7 @@ func _auto_deploy_card_index(row: int) -> int:
 		if not can_afford(card_id):
 			continue
 		var score := _auto_deploy_score(card_id, row)
-		var cost := int(card_definitions[card_id]["cost"])
+		var cost := _card_cost(card_id)
 		if score > best_score or (score == best_score and cost < best_cost):
 			best_index = index
 			best_score = score
