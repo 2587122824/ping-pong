@@ -173,11 +173,13 @@ const TYPE_COLORS := {
 }
 
 # 3D 场景节点
-const LANE_Z := [-2.3, 0.0, 2.3]
+const LANE_Z := [-1.6, 0.0, 1.6]
 const SLOT_X0 := 1.15
 const SLOT_X_STEP := 1.0
 
 var battle_camera: Camera3D
+var board_viewport: SubViewport
+var board_container: SubViewportContainer
 var table_mesh: MeshInstance3D
 var panels := {"player": [], "enemy": []}
 var panel_mats := {"player": [], "enemy": []}
@@ -869,6 +871,12 @@ func _slot_position(side: String, lane: int, row: int) -> Vector3:
 
 
 func _build_world() -> void:
+	# 3D 棋盘渲染进独立 SubViewport，固定在顶部带状区域，不与底部手牌重叠
+	board_viewport = SubViewport.new()
+	board_viewport.size = Vector2i(1240, 330)
+	board_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	var world := board_viewport
+
 	# 独立环境光 + 平行光（布阵场景可能脱离主世界单独打开）
 	var env_node := WorldEnvironment.new()
 	var env := Environment.new()
@@ -878,47 +886,46 @@ func _build_world() -> void:
 	env.ambient_light_color = Color("#9db8d6")
 	env.ambient_light_energy = 0.85
 	env_node.environment = env
-	add_child(env_node)
+	world.add_child(env_node)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, 25, 0)
 	sun.light_color = Color("#b9d7ff")
 	sun.light_energy = 1.1
-	add_child(sun)
+	world.add_child(sun)
 
 	battle_camera = Camera3D.new()
-	battle_camera.fov = 50.0
-	add_child(battle_camera)
-	battle_camera.position = Vector3(0.0, 12.5, 10.5)
-	battle_camera.look_at(Vector3(0.0, 0.0, 0.0))
+	battle_camera.fov = 40.0
+	world.add_child(battle_camera)
+	battle_camera.look_at_from_position(Vector3(0.0, 9.5, 1.0), Vector3.ZERO, Vector3.UP)
 	battle_camera.current = true
 
 	# 台面底座外框
 	var frame := MeshInstance3D.new()
 	var frame_box := BoxMesh.new()
-	frame_box.size = Vector3(15.9, 0.18, 7.8)
+	frame_box.size = Vector3(15.9, 0.18, 6.0)
 	frame.mesh = frame_box
 	frame.material_override = _material(Color("#0a1420"))
 	frame.position = Vector3(0.0, -0.22, 0.0)
-	add_child(frame)
+	world.add_child(frame)
 
 	# 台面
 	table_mesh = MeshInstance3D.new()
 	var table_box := BoxMesh.new()
-	table_box.size = Vector3(15.5, 0.3, 7.4)
+	table_box.size = Vector3(15.5, 0.3, 5.6)
 	table_mesh.mesh = table_box
 	table_mesh.material_override = _material(Color("#122338"))
 	table_mesh.position = Vector3(0.0, -0.15, 0.0)
-	add_child(table_mesh)
+	world.add_child(table_mesh)
 
 	# 中线提示条
 	var center_line := MeshInstance3D.new()
 	var center_box := BoxMesh.new()
-	center_box.size = Vector3(0.12, 0.02, 7.0)
+	center_box.size = Vector3(0.12, 0.02, 5.2)
 	center_line.mesh = center_box
 	center_line.material_override = _material(Color("#35567a"), true)
 	center_line.position = Vector3(0.0, 0.01, 0.0)
-	add_child(center_line)
+	world.add_child(center_line)
 
 	# 槽位面板 + 点选 Area3D
 	for side in ["player", "enemy"]:
@@ -933,7 +940,7 @@ func _build_world() -> void:
 			for row in range(ROWS):
 				var panel := MeshInstance3D.new()
 				var box := BoxMesh.new()
-				box.size = Vector3(0.9, 0.1, 2.0)
+				box.size = Vector3(0.9, 0.1, 1.4)
 				panel.mesh = box
 				var mat := StandardMaterial3D.new()
 				mat.albedo_color = _zone_color(zone_of_row(row))
@@ -942,11 +949,11 @@ func _build_world() -> void:
 				panel.set_meta("side", side)
 				panel.set_meta("lane", lane)
 				panel.set_meta("row", row)
-				add_child(panel)
+				world.add_child(panel)
 
 				var area := Area3D.new()
 				var shape := BoxShape3D.new()
-				shape.size = Vector3(0.9, 0.8, 2.0)
+				shape.size = Vector3(0.9, 0.8, 1.4)
 				var collision := CollisionShape3D.new()
 				collision.shape = shape
 				area.add_child(collision)
@@ -954,7 +961,7 @@ func _build_world() -> void:
 				area.set_meta("side", side)
 				area.set_meta("lane", lane)
 				area.set_meta("row", row)
-				add_child(area)
+				world.add_child(area)
 
 				lane_panels.append(panel)
 				lane_mats.append(mat)
@@ -975,7 +982,7 @@ func _build_world() -> void:
 	bomb_material.roughness = 0.35
 	bomb_node.material_override = bomb_material
 	bomb_node.position = Vector3(0.0, 0.42, LANE_Z[1])
-	add_child(bomb_node)
+	world.add_child(bomb_node)
 
 	# 引信火花
 	var fuse := MeshInstance3D.new()
@@ -1000,7 +1007,7 @@ func _build_world() -> void:
 	boom_material.emission = Color(1.0, 0.5, 0.15)
 	boom_node.material_override = boom_material
 	boom_node.visible = false
-	add_child(boom_node)
+	world.add_child(boom_node)
 
 
 func _zone_color(zone: String) -> Color:
@@ -1036,8 +1043,8 @@ func _on_mouse_down(event: InputEventMouseButton) -> void:
 		drag_start = event.position
 		drag_active = false
 		return
-	# 点在其他 2D 控件（按钮/标签）上时不穿透到 3D 槽位
-	if hovered != null:
+	# 点在其他 2D 控件（按钮/标签/棋盘视口容器）上时不穿透到 3D 槽位
+	if hovered != null and hovered != board_container:
 		return
 	var slot := _pick_slot(event.position)
 	if not slot.is_empty():
@@ -1049,7 +1056,7 @@ func _on_mouse_up(event: InputEventMouseButton) -> void:
 		return
 	if drag_active:
 		var hovered_up := get_viewport().gui_get_hovered_control()
-		var over_gui := hovered_up != null and not hovered_up.has_meta("hand_index")
+		var over_gui := hovered_up != null and hovered_up != board_container and not hovered_up.has_meta("hand_index")
 		if not over_gui:
 			var slot := _pick_slot(event.position)
 			if not slot.is_empty() and String(slot["side"]) == "player":
@@ -1062,8 +1069,9 @@ func _on_mouse_up(event: InputEventMouseButton) -> void:
 
 
 func _pick_slot(screen_pos: Vector2) -> Dictionary:
-	var ray = battle_camera.get_screen_ray(screen_pos)
-	var space := get_world_3d().direct_space_state
+	var local := _to_viewport_local(screen_pos)
+	var ray = battle_camera.get_screen_ray(local)
+	var space := board_viewport.world_3d.direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(ray.origin, ray.origin + ray.direction * 30.0)
 	query.collide_with_areas = true
 	var hit := space.intersect_ray(query)
@@ -1077,6 +1085,16 @@ func _pick_slot(screen_pos: Vector2) -> Dictionary:
 		"lane": int(collider.get_meta("lane")),
 		"row": int(collider.get_meta("row"))
 	}
+
+
+func _to_viewport_local(screen_pos: Vector2) -> Vector2:
+	if board_container == null or board_viewport == null:
+		return screen_pos
+	var csize := board_container.size
+	if csize.x <= 0.0 or csize.y <= 0.0:
+		return screen_pos
+	var vlocal := (screen_pos - board_container.global_position) * Vector2(board_viewport.size) / csize
+	return vlocal
 
 
 func _show_drag_label(card_name: String, pos: Vector2) -> void:
@@ -1117,7 +1135,7 @@ func _sync_tokens() -> void:
 					token.mesh = capsule
 					token.material_override = StandardMaterial3D.new()
 					token.position = _slot_position(side, lane, row) + Vector3(0.0, 0.42, 0.0)
-					add_child(token)
+					board_viewport.add_child(token)
 					# 棋子底座圆盘
 					var base := MeshInstance3D.new()
 					var base_cyl := CylinderMesh.new()
@@ -1128,11 +1146,26 @@ func _sync_tokens() -> void:
 					base.material_override = StandardMaterial3D.new()
 					base.position = Vector3(0.0, -0.38, 0.0)
 					token.add_child(base)
+					# 头顶卡牌名标签
+					var label := Label3D.new()
+					label.name = "unit_label"
+					label.position = Vector3(0.0, 0.85, 0.0)
+					label.font_size = 22
+					label.pixel_size = 0.010
+					label.outline_size = 6
+					label.outline_modulate = Color("#0b1220")
+					label.billboard = 1
+					token.add_child(label)
 					tokens[side][lane][row] = token
 				var mat: StandardMaterial3D = token.material_override
 				mat.albedo_color = _token_color(unit)
 				var base_mat: StandardMaterial3D = token.get_child(0).material_override
 				base_mat.albedo_color = _token_color(unit).darkened(0.55)
+				var unit_label: Label3D = token.get_node_or_null("unit_label")
+				if unit_label != null:
+					var suffix := "" if int(unit.actions) <= 0 else " ×%d" % int(unit.actions)
+					unit_label.text = String(unit.name) + suffix
+					unit_label.modulate = Color("#f1f8ff")
 				# 扣顶小标识：靠近相机一侧压低棋子高度，远台略小，形成纵深
 				var scale := 1.0 - row * 0.03
 				token.scale = Vector3(scale, scale, scale)
@@ -1251,11 +1284,12 @@ func _build_ui() -> void:
 	stamina_bar.show_percentage = false
 	status.add_child(stamina_bar)
 
-	# 占出棋盘区域（3D 场景渲染在覆盖层下方）
-	var board_spacer := Control.new()
-	board_spacer.custom_minimum_size = Vector2(1200, 330)
-	board_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	main.add_child(board_spacer)
+	# 棋盘 3D 视口（固定在顶部带状区域，手牌在其下方，互不遮挡）
+	board_container = SubViewportContainer.new()
+	board_container.custom_minimum_size = Vector2(1240, 330)
+	board_container.stretch = true
+	board_container.add_child(board_viewport)
+	main.add_child(board_container)
 
 	# 手牌
 	var hand_row := HBoxContainer.new()
@@ -1264,7 +1298,7 @@ func _build_ui() -> void:
 	hand_bar = hand_row
 	for i in range(HAND_SIZE):
 		var button := Button.new()
-		button.custom_minimum_size = Vector2(236, 104)
+		button.custom_minimum_size = Vector2(236, 92)
 		button.add_theme_font_size_override("font_size", 14)
 		button.set_meta("hand_index", i)
 		hand_buttons.append(button)
@@ -1301,7 +1335,7 @@ func _build_ui() -> void:
 
 	log_label = Label.new()
 	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	log_label.custom_minimum_size = Vector2(1220, 104)
+	log_label.custom_minimum_size = Vector2(1220, 80)
 	log_label.add_theme_font_size_override("font_size", 13)
 	log_label.add_theme_color_override("font_color", Color("#a9bfd1"))
 	main.add_child(log_label)
