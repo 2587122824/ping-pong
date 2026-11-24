@@ -173,7 +173,7 @@ const TYPE_COLORS := {
 }
 
 # 3D 场景节点
-const LANE_Z := [-1.6, 0.0, 1.6]
+const LANE_Z := [-1.2, 0.0, 1.2]
 const SLOT_X0 := 1.15
 const SLOT_X_STEP := 1.0
 
@@ -897,13 +897,13 @@ func _build_world() -> void:
 	battle_camera = Camera3D.new()
 	battle_camera.fov = 40.0
 	world.add_child(battle_camera)
-	battle_camera.look_at_from_position(Vector3(0.0, 9.5, 1.0), Vector3.ZERO, Vector3.UP)
+	battle_camera.look_at_from_position(Vector3(0.0, 7.5, 0.8), Vector3.ZERO, Vector3.UP)
 	battle_camera.current = true
 
 	# 台面底座外框
 	var frame := MeshInstance3D.new()
 	var frame_box := BoxMesh.new()
-	frame_box.size = Vector3(15.9, 0.18, 6.0)
+	frame_box.size = Vector3(15.9, 0.18, 5.0)
 	frame.mesh = frame_box
 	frame.material_override = _material(Color("#0a1420"))
 	frame.position = Vector3(0.0, -0.22, 0.0)
@@ -912,7 +912,7 @@ func _build_world() -> void:
 	# 台面
 	table_mesh = MeshInstance3D.new()
 	var table_box := BoxMesh.new()
-	table_box.size = Vector3(15.5, 0.3, 5.6)
+	table_box.size = Vector3(15.5, 0.3, 4.6)
 	table_mesh.mesh = table_box
 	table_mesh.material_override = _material(Color("#122338"))
 	table_mesh.position = Vector3(0.0, -0.15, 0.0)
@@ -921,7 +921,7 @@ func _build_world() -> void:
 	# 中线提示条
 	var center_line := MeshInstance3D.new()
 	var center_box := BoxMesh.new()
-	center_box.size = Vector3(0.12, 0.02, 5.2)
+	center_box.size = Vector3(0.12, 0.02, 4.2)
 	center_line.mesh = center_box
 	center_line.material_override = _material(Color("#35567a"), true)
 	center_line.position = Vector3(0.0, 0.01, 0.0)
@@ -940,7 +940,7 @@ func _build_world() -> void:
 			for row in range(ROWS):
 				var panel := MeshInstance3D.new()
 				var box := BoxMesh.new()
-				box.size = Vector3(0.9, 0.1, 1.4)
+				box.size = Vector3(0.9, 0.1, 1.1)
 				panel.mesh = box
 				var mat := StandardMaterial3D.new()
 				mat.albedo_color = _zone_color(zone_of_row(row))
@@ -953,7 +953,7 @@ func _build_world() -> void:
 
 				var area := Area3D.new()
 				var shape := BoxShape3D.new()
-				shape.size = Vector3(0.9, 0.8, 1.4)
+				shape.size = Vector3(0.9, 0.8, 1.1)
 				var collision := CollisionShape3D.new()
 				collision.shape = shape
 				area.add_child(collision)

@@ -105,3 +105,4 @@
 - 2026-11-25 界面与 3D 美化：手牌卡片圆角 10、类型色描边（选中提亮 2px、非选中压暗 0.35、体力不足灰底）；顶部状态行包一层半透明深色圆角 `PanelContainer`；关卡/操作按钮统一深色圆角样式；台面加深蓝并加外框底座，分区配色提亮，棋子加底座圆盘，炸弹改金属质感（metallic 0.6 / roughness 0.35）；相机收至 fov 50、位置 (0,12.5,10.5)。
 - 2026-11-25 棋盘与手牌分离 + 棋子实名：3D 场景迁入独立 `SubViewport`（1240×330），由 `SubViewportContainer` 固定在顶部带状区域，手牌/按钮/日志在其下方，不再互相遮挡；射线拾取坐标经 `_to_viewport_local` 换算到视口本地坐标系，物理空间用 `board_viewport.world_3d`。棋子头顶挂 `Label3D`，显示卡牌名 + 剩余出手次数（`×N`），描边深色、billboard 朝向相机；车道 Z 间距收紧到 ±1.6，台面/槽位深度同步收窄。相机 `look_at_from_position` 构造（节点入树前不能用 `look_at`）。
 - 2026-11-25 修复槽位拾取失效：Godot 4.7.2 的 `Camera3D`/`SubViewport` 均无 `get_screen_ray` 方法，射线改为 `project_ray_origin(screen)` + `project_ray_normal(screen)` 手工构造；`SubViewport.world_3d` 在未独立建世界时为 null，物理空间回退 `get_world_3d().direct_space_state`。探针投影 9 个我方槽位世界坐标回屏幕再拾取，side/lane/row 全部命中，符合区域的牌 `try_deploy` 成功。
+- 2026-11-25 棋盘放大：车道 Z 间距收紧到 ±1.2（槽位/台面/中线深度同步收窄），相机拉近到 (0,7.5,0.8)，棋盘铺满顶部视口带状区域，棋子与卡名标签清晰可读。
