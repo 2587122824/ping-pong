@@ -136,6 +136,14 @@ var card_cost_multiplier := 1.0
 var battle_cost_multiplier := 1.0
 var battle_reinforce_cooldown := 0.0
 var battle_reinforce_ready_at := 0.0
+# 补牌节奏：布阵阶段出牌立即补 1 张；战斗中改为每 hand_refill_interval 秒补 1 张（0 表示恢复旧的立即补牌）。
+var hand_refill_interval := 2.0
+var hand_refill_progress := 0.0
+var hand_starved_time := 0.0
+# 换牌：选中一张手牌后花体力换掉并立即抽 1 张，每场限 reroll_limit 次。
+var reroll_cost := 2
+var reroll_limit := 3
+var rerolls_left := 3
 var player_stamina_timer := 0.0
 var enemy_stamina_timer := 0.0
 var enemy_reinforce_timer := 0.0
@@ -180,6 +188,7 @@ var level_buttons := {}
 var deck_buttons := {}
 var start_button: Button
 var speed_button: Button
+var reroll_button: Button
 var auto_deploy_button: Button
 var hand_container: HBoxContainer
 var card_views: Array = []
@@ -233,10 +242,13 @@ func restart_battle() -> void:
 	player_stamina = mini(opening_stamina, STAMINA_MAX)
 	enemy_stamina = 0
 	battle_reinforce_ready_at = 0.0
+	hand_refill_progress = 0.0
+	hand_starved_time = 0.0
 	player_stamina_timer = 0.0
 	enemy_stamina_timer = 0.0
 	enemy_reinforce_timer = 0.0
 	enemy_reinforce_index = 0
+	rerolls_left = reroll_limit
 	sudden_death_active = false
 	sudden_death_timer = 0.0
 	player_empty_timer = 0.0
@@ -292,6 +304,8 @@ func start_battle() -> void:
 	player_stamina_timer = 0.0
 	enemy_stamina_timer = 0.0
 	enemy_reinforce_timer = 0.0
+	hand_refill_progress = 0.0
+	hand_starved_time = 0.0
 	sudden_death_active = false
 	sudden_death_timer = 0.0
 	player_empty_timer = 0.0
@@ -347,13 +361,56 @@ func try_deploy(card_id: String, hand_index: int, lane: int, row: int) -> bool:
 		old_unit.alive = false
 	_add_log("%s %s → %s（-%d 体力）" % [action, new_unit.display_name, _slot_name(lane, row), cost])
 	selected_card_index = -1
-	var drawn := _draw_card()
-	if not drawn.is_empty():
-		player_hand.append(drawn)
+	var instant_refill: bool = phase == "deploy" or hand_refill_interval <= 0.0
+	if instant_refill:
+		var drawn := _draw_card()
+		if not drawn.is_empty():
+			player_hand.append(drawn)
 	_refresh_hand()
 	_set_feedback("%s成功：%s" % [action, new_unit.display_name], true)
 	_refresh_dynamic_ui()
 	return true
+
+
+func reroll_selected_card() -> bool:
+	if phase != "deploy" and phase != "battle":
+		_set_feedback("战斗已结束，不能换牌", false)
+		return false
+	if selected_card_index < 0 or selected_card_index >= player_hand.size():
+		_set_feedback("先点选一张手牌，再按换牌", false)
+		return false
+	if rerolls_left <= 0:
+		_set_feedback("本场换牌次数已用完", false)
+		return false
+	if player_stamina < reroll_cost:
+		_set_feedback("体力不足：换牌需要 %d，当前 %d" % [reroll_cost, player_stamina], false)
+		return false
+	var card_id := String(player_hand[selected_card_index])
+	player_hand.remove_at(selected_card_index)
+	player_discard.append(card_id)
+	player_stamina -= reroll_cost
+	rerolls_left -= 1
+	selected_card_index = -1
+	var drawn := _draw_card()
+	if not drawn.is_empty():
+		player_hand.append(drawn)
+		_add_log("换牌：%s → 弃牌并抽到 %s（-%d 体力，剩 %d 次）" % [
+			String(card_definitions[card_id]["name"]), String(card_definitions[drawn]["name"]),
+			reroll_cost, rerolls_left
+		])
+		_set_feedback("换到 %s" % String(card_definitions[drawn]["name"]), true)
+	else:
+		_add_log("换牌：%s → 弃牌（-%d 体力，剩 %d 次）；牌库已空" % [
+			String(card_definitions[card_id]["name"]), reroll_cost, rerolls_left
+		])
+		_set_feedback("牌库已空，换牌后手牌变少", false)
+	_refresh_hand()
+	_refresh_dynamic_ui()
+	return true
+
+
+func _on_reroll_pressed() -> void:
+	reroll_selected_card()
 
 
 func select_card(index: int) -> void:
@@ -483,6 +540,8 @@ func _simulate(delta: float) -> void:
 	if enemy_reinforce_timer >= ENEMY_REINFORCE_INTERVAL:
 		enemy_reinforce_timer -= ENEMY_REINFORCE_INTERVAL
 		_try_enemy_reinforce()
+
+	_update_hand_refill(delta)
 
 	var units := _all_units()
 	for unit in units:
@@ -629,6 +688,27 @@ func _draw_card() -> String:
 			player_draw_pile.shuffle()
 		_add_log("弃牌堆洗回牌库（%d 张）" % player_draw_pile.size())
 	return String(player_draw_pile.pop_front())
+
+
+func _update_hand_refill(delta: float) -> void:
+	if hand_refill_interval <= 0.0:
+		return
+	if player_hand.is_empty():
+		hand_starved_time += delta
+	if player_hand.size() >= HAND_SIZE:
+		hand_refill_progress = 0.0
+		return
+	hand_refill_progress += delta
+	while hand_refill_progress >= hand_refill_interval and player_hand.size() < HAND_SIZE:
+		hand_refill_progress -= hand_refill_interval
+		var drawn := _draw_card()
+		if drawn.is_empty():
+			hand_refill_progress = 0.0
+			return
+		player_hand.append(drawn)
+		_refresh_hand()
+	if player_hand.size() >= HAND_SIZE:
+		hand_refill_progress = 0.0
 
 
 func _find_target(unit):
@@ -1082,14 +1162,23 @@ func _refresh_dynamic_ui() -> void:
 
 	_update_empty_warning()
 
-	pile_label.text = "牌库 %d · 弃牌 %d\n手牌 %d / %d" % [
-		player_draw_pile.size(), player_discard.size(), player_hand.size(), HAND_SIZE
+	var refill_text := ""
+	if phase == "battle" and hand_refill_interval > 0.0:
+		if player_hand.size() >= HAND_SIZE:
+			refill_text = " · 补牌已满"
+		else:
+			refill_text = " · 下一张 %.1f s" % max(0.0, hand_refill_interval - hand_refill_progress)
+	pile_label.text = "牌库 %d · 弃牌 %d\n手牌 %d / %d%s" % [
+		player_draw_pile.size(), player_discard.size(), player_hand.size(), HAND_SIZE, refill_text
 	]
 	log_label.text = _recent_log_text()
 	feedback_label.text = feedback
 	feedback_label.add_theme_color_override("font_color", Color("#86efac") if feedback_ok else Color("#fca5a5"))
 	_refresh_card_states()
 	speed_button.text = "速度 x%d" % int(speed_multiplier)
+	if reroll_button != null:
+		reroll_button.text = "换牌 %d" % rerolls_left
+		reroll_button.disabled = rerolls_left <= 0 or player_stamina < reroll_cost or player_hand.is_empty()
 	if auto_deploy_button != null:
 		auto_deploy_button.disabled = phase != "deploy"
 
@@ -1436,8 +1525,9 @@ func _build_ui() -> void:
 	stamina_text = _add_label(stamina_panel, Vector2(88, 6), Vector2(90, 18), "100 / 100", 13, Color("#fef3c7"))
 	stamina_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	stamina_bar = _add_bar(stamina_panel, Vector2(12, 30), Vector2(166, 14), STAMINA_MAX, Color("#fbbf24"))
-	stamina_hint = _add_label(stamina_panel, Vector2(12, 64), Vector2(166, 30), "布阵阶段不恢复\n开战后每 %.0f 秒 +%d" % [STAMINA_REGEN_INTERVAL, STAMINA_REGEN_AMOUNT], 9, Color("#cbd5e1"))
+	stamina_hint = _add_label(stamina_panel, Vector2(12, 64), Vector2(80, 30), "布阵不恢复\n开战每 %.0f 秒 +%d" % [STAMINA_REGEN_INTERVAL, STAMINA_REGEN_AMOUNT], 9, Color("#cbd5e1"))
 	stamina_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reroll_button = _add_button(stamina_panel, Vector2(98, 64), Vector2(80, 30), "换牌 3", _on_reroll_pressed)
 
 	var pile_panel := _make_panel(root_ui, Vector2(1064, 606), Vector2(192, 100), Color(0.02, 0.05, 0.08, 0.92), Color("#475569"))
 	pile_label = _add_label(pile_panel, Vector2(12, 8), Vector2(168, 34), "", 11, Color("#cbd5e1"))

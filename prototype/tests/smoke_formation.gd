@@ -311,6 +311,30 @@ func _run() -> void:
 	var total_cards: int = battle.player_hand.size() + battle.player_draw_pile.size() + battle.player_discard.size()
 	assert(total_cards == 12, "twelve cards stay in the cycle")
 
+	# 战斗补牌：出牌不立即补，改为每 hand_refill_interval 秒补 1 张
+	battle.level_id = "CH0-01"
+	battle.restart_battle()
+	battle.start_battle()
+	battle.hand_refill_interval = 2.0
+	var battle_card := String(battle.player_hand[0])
+	var hand_before: int = battle.player_hand.size()
+	assert(battle.try_deploy(battle_card, 0, 0, 0), "deploy during battle")
+	assert(battle.player_hand.size() == hand_before - 1, "battle deploy does not refill instantly")
+	battle.tick(2.1)
+	assert(battle.player_hand.size() == hand_before, "timer refills the hand in battle")
+
+	# 换牌：扣体力、换 1 张、次数递减
+	battle.selected_card_index = 0
+	var reroll_stamina: int = battle.player_stamina
+	var reroll_size: int = battle.player_hand.size()
+	assert(battle.reroll_selected_card(), "reroll replaces the selected card")
+	assert(battle.player_stamina == reroll_stamina - 2, "reroll costs 2 stamina")
+	assert(battle.player_hand.size() == reroll_size, "reroll keeps the hand size")
+	assert(battle.rerolls_left == 2, "reroll budget decreases")
+	battle.rerolls_left = 0
+	assert(not battle.reroll_selected_card(), "reroll blocked once the budget is spent")
+	battle.rerolls_left = 3
+
 	# 敌方补位机制仍可用：临时打开开关后填一格
 	battle.level_definitions["CH0-01"]["enemy_reinforce"] = true
 	battle.level_id = "CH0-01"
