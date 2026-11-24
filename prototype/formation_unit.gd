@@ -32,6 +32,8 @@ var slow_timer := 0.0
 var alive := true
 var deploy_seq := 0
 var resource_capped := false
+var phases: Array = []
+var phase_index := 0
 
 
 func absolute_row() -> int:
@@ -71,6 +73,8 @@ func status_text() -> String:
 		text += "愈"
 	if resource_capped:
 		text += "限"
+	if phase_index > 0:
+		text += "%d阶" % (phase_index + 1)
 	return text
 
 

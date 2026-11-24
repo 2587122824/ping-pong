@@ -55,6 +55,15 @@ var card_definitions := {
 	"van_061": {"name": "烈焰自爆兵", "role": "attack", "cost": 5, "hp": 15, "damage": 2, "interval": 1.2, "deathrattle": 12, "description": "亡语：对同路敌方第 1 条存活排造成 12 伤害。"},
 	"bas_061": {"name": "穿甲狙击手", "role": "attack", "cost": 18, "hp": 60, "damage": 11, "interval": 2.2, "pierce": true, "description": "穿透：无视嘲讽，优先攻击最后排。"},
 	"bas_059": {"name": "审判日加农炮", "role": "attack", "cost": 26, "hp": 92, "damage": 12, "interval": 2.4, "charge": 6.0, "description": "蓄力：每 6 秒，下一次攻击 3 倍伤害。"},
+	"solo_dummy": {"name": "训练木桩", "role": "attack", "cost": 0, "hp": 260, "damage": 6, "interval": 2.6, "description": "教学用单体靶机：不倒、不补位，只做基础还击。"},
+	"solo_bomber": {"name": "烈焰自爆兵", "role": "attack", "cost": 0, "hp": 320, "damage": 8, "interval": 1.6, "deathrattle": 20, "description": "亡语：退场时对同路第 1 条存活排造成 20 伤害。"},
+	"solo_sniper": {"name": "穿甲狙击手", "role": "attack", "cost": 0, "hp": 520, "damage": 12, "interval": 2.2, "pierce": true, "description": "穿透：无视嘲讽，优先攻击最后排。"},
+	"solo_frost": {"name": "冰霜术士", "role": "disrupt", "cost": 0, "hp": 460, "damage": 8, "interval": 1.8, "suppress_regen": true, "description": "压制：存活时玩家体力恢复减半；命中使目标间隔 +50%。"},
+	"boss_referee": {"name": "裁判机兵", "role": "attack", "cost": 0, "hp": 1400, "damage": 13, "interval": 2.1, "charge": 7.0, "description": "【蓄力】每 7 秒，下一次攻击 3 倍。生命降到 65% / 30% 时进入第二、第三阶段：破防、压制、蓄力提速。",
+		"phases": [
+			{"hp_ratio": 0.65, "damage_add": 4, "interval_mult": 0.85, "pierce": true, "label": "第二阶段 · 破防"},
+			{"hp_ratio": 0.30, "damage_add": 6, "interval_mult": 0.75, "suppress_regen": true, "charge": 5.0, "label": "第三阶段 · 压制"}
+		]},
 	"van_007": {"name": "轻装斥候", "role": "attack", "cost": 3, "hp": 14, "damage": 3, "interval": 0.9, "description": "极低费快速填补空位。"},
 	"van_009": {"name": "迅捷剑士", "role": "attack", "cost": 7, "hp": 30, "damage": 4, "interval": 0.85, "description": "攻击速度极快。"},
 	"van_033": {"name": "稻草假人", "role": "defense", "cost": 3, "hp": 22, "damage": 0, "interval": 2.0, "taunt": true, "description": "嘲讽：极低费应急挡刀墙。"},
@@ -93,59 +102,47 @@ var deck_definitions := {
 var level_definitions := {
 	"CH0-01": {
 		"name": "新兵试炼 · 教学", "type": "教学", "enemy_deck": "aero",
-		"special": "无",
-		"hint": "敌方只有两个单位。用远程单位从后排安全输出，或直接压前排。",
+		"enemy_limit": 1, "enemy_reinforce": false,
+		"special": "单体靶机：不倒、不补位，只做基础还击",
+		"hint": "对手只有一台训练木桩。把输出集中到它身上，前排留 1–2 个低血单位挨打即可。",
 		"formation": [
-			{"card": "aero_002", "lane": 1, "row": 0},
-			{"card": "aero_004", "lane": 0, "row": 0}
+			{"card": "solo_dummy", "lane": 1, "row": 1}
 		]
 	},
 	"CH1-01": {
 		"name": "前线遭遇 · 普通", "type": "普通", "enemy_deck": "vanguard",
-		"special": "亡语：烈焰自爆兵被击破时对同路第 1 存活排造成 12 伤害",
-		"hint": "烈焰自爆兵倒下时会炸同路第 1 条存活排。优先清掉它，或用远程在它身后处理，或把低血单位移开这一路。",
+		"enemy_limit": 1, "enemy_reinforce": false,
+		"special": "亡语：烈焰自爆兵被击破时对同路第 1 存活排造成 20 伤害",
+		"hint": "它倒下时会炸同路第 1 条存活排。同路前排别放残血单位，或先把低血单位挪开这一路。",
 		"formation": [
-			{"card": "van_001", "lane": 0, "row": 0},
-			{"card": "van_002", "lane": 1, "row": 0},
-			{"card": "van_003", "lane": 2, "row": 0},
-			{"card": "van_061", "lane": 2, "row": 1}
+			{"card": "solo_bomber", "lane": 1, "row": 1}
 		]
 	},
 	"CH1-E01": {
 		"name": "破阵狙击 · 精英", "type": "精英", "enemy_deck": "bastion",
+		"enemy_limit": 1, "enemy_reinforce": false,
 		"special": "穿透：穿甲狙击手无视嘲讽，优先打最后排",
-		"hint": "穿甲狙击手会无视嘲讽，优先攻击最后排。后排放低价值单位，或先击破它。",
+		"hint": "它会绕过嘲讽直取后排。后排放高血单位，或把它挡在换位之外先集火。",
 		"formation": [
-			{"card": "bas_002", "lane": 1, "row": 0},
-			{"card": "bas_061", "lane": 0, "row": 0},
-			{"card": "bas_006", "lane": 1, "row": 1},
-			{"card": "bas_004", "lane": 1, "row": 2},
-			{"card": "bas_005", "lane": 2, "row": 2}
+			{"card": "solo_sniper", "lane": 1, "row": 1}
 		]
 	},
 	"CH0-B01": {
-		"name": "审判日 · BOSS", "type": "BOSS", "enemy_deck": "bastion",
-		"special": "蓄力：审判日加农炮每 6 秒蓄力，下次攻击 3 倍",
-		"hint": "审判日加农炮每 6 秒蓄力，下一次攻击 3 倍。先击破它，或让它打在你的防御单位上。",
+		"name": "裁判机兵 · BOSS", "type": "BOSS", "enemy_deck": "bastion",
+		"enemy_limit": 1, "enemy_reinforce": false,
+		"special": "三阶段单体：蓄力 3 倍 → 破防穿透 → 压制恢复",
+		"hint": "它打空场只有 13 / 2.1s，但每 7 秒蓄力一次 3 倍。血量 65% 起穿透后排、30% 起把你体力恢复减半，越拖越难。",
 		"formation": [
-			{"card": "bas_059", "lane": 0, "row": 0},
-			{"card": "bas_002", "lane": 1, "row": 0},
-			{"card": "bas_003", "lane": 2, "row": 0},
-			{"card": "bas_004", "lane": 1, "row": 1},
-			{"card": "bas_006", "lane": 2, "row": 1},
-			{"card": "bas_005", "lane": 0, "row": 2}
+			{"card": "boss_referee", "lane": 1, "row": 1}
 		]
 	},
 	"CH1-S01": {
 		"name": "寂静力场 · 支线", "type": "支线", "enemy_deck": "aero",
+		"enemy_limit": 1, "enemy_reinforce": false,
 		"special": "压制：冰霜术士存活时玩家体力恢复减半",
-		"hint": "冰霜术士存活时，你的体力恢复减半。优先集火它，或者改用低费牌。",
+		"hint": "它让你体力恢复减半，还带减速。改用低费牌或先靠资源单位撑住补位。",
 		"formation": [
-			{"card": "aero_001", "lane": 0, "row": 0},
-			{"card": "aero_002", "lane": 1, "row": 0},
-			{"card": "aero_003", "lane": 2, "row": 0},
-			{"card": "aero_004", "lane": 1, "row": 1},
-			{"card": "aero_005", "lane": 0, "row": 2}
+			{"card": "solo_frost", "lane": 1, "row": 1}
 		]
 	}
 }
@@ -543,6 +540,8 @@ func _simulate(delta: float) -> void:
 			continue
 		if unit.role == "tactic":
 			continue
+		if not unit.phases.is_empty():
+			_apply_unit_phases(unit)
 		if unit.slow_timer > 0.0:
 			unit.slow_timer = max(0.0, unit.slow_timer - delta)
 		if unit.regen_amount > 0 and unit.hp < unit.max_hp:
@@ -639,6 +638,10 @@ func _create_unit(card_id: String, side: String, lane: int, row: int):
 	unit.back_row_bonus = int(def.get("back_row_bonus", 0))
 	unit.healthy_bonus = int(def.get("healthy_bonus", 0))
 	unit.taunt_front_bonus = int(def.get("taunt_front_bonus", 0))
+	unit.phases = def.get("phases", [])
+	unit.phase_index = 0
+	if bool(def.get("suppress_regen", false)):
+		unit.suppress_player_regen = true
 	var deploy_gain := int(def.get("deploy_stamina", 0))
 	if deploy_gain > 0:
 		_grant_stamina(side, deploy_gain, "%s 入场" % unit.display_name)
@@ -778,6 +781,30 @@ func _count_units_in_lane(side: String, lane: int) -> int:
 	return count
 
 
+func _enemy_unit_limit() -> int:
+	return int(level_definitions[level_id].get("enemy_limit", 3))
+
+
+func _apply_unit_phases(unit) -> void:
+	while unit.phase_index < unit.phases.size():
+		var phase: Dictionary = unit.phases[unit.phase_index]
+		if float(unit.hp) / float(max(1, int(unit.max_hp))) > float(phase.get("hp_ratio", 0.0)):
+			return
+		unit.damage += int(phase.get("damage_add", 0))
+		unit.interval *= float(phase.get("interval_mult", 1.0))
+		if bool(phase.get("pierce", false)):
+			unit.ignore_taunt = true
+			unit.prefer_back = true
+		if bool(phase.get("suppress_regen", false)):
+			unit.suppress_player_regen = true
+		var phase_charge := float(phase.get("charge", 0.0))
+		if phase_charge > 0.0:
+			unit.charge_interval = phase_charge
+			unit.charge_timer = min(unit.charge_timer, phase_charge)
+		_add_log("%s 进入%s" % [unit.display_name, String(phase.get("label", "下一阶段"))])
+		unit.phase_index += 1
+
+
 func _kill_unit(unit) -> void:
 	if not unit.alive:
 		return
@@ -894,6 +921,10 @@ func _player_has_resource_unit() -> bool:
 
 func _try_enemy_reinforce() -> void:
 	if phase != "battle":
+		return
+	if not bool(level_definitions[level_id].get("enemy_reinforce", true)):
+		return
+	if _count_side_units("enemy") >= _enemy_unit_limit():
 		return
 	var deck: Array = deck_definitions[String(level_definitions[level_id]["enemy_deck"])]["cards"]
 	if deck.is_empty():

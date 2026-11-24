@@ -14,19 +14,31 @@ func _run() -> void:
 	root.add_child(battle)
 	await process_frame
 
-	# 初始状态
+	# 初始状态：每关只有 1 个敌方单位
 	assert(String(battle.phase) == "deploy", "starts in deploy phase")
 	assert(battle.player_stamina == 100, "stamina starts at 100")
 	assert(battle.player_hand.size() == 5, "hand starts with 5")
 	assert(battle.player_draw_pile.size() == 7, "rest of the 12-card deck in draw pile")
-	assert(_count_side(battle, "enemy") == 4, "normal level has 4 enemy units")
+	assert(_count_side(battle, "enemy") == 1, "normal level has a single enemy unit")
+	assert(battle._enemy_unit_limit() == 1, "level caps the enemy board at 1 unit")
+	assert(not bool(battle.level_definitions["CH1-01"]["enemy_reinforce"]), "single enemy levels do not reinforce")
+	assert(String(battle.board["enemy"][1][1].card_id) == "solo_bomber", "single enemy sits in the middle slot")
+	assert(battle.board["enemy"][1][1].max_hp == 352, "enemy unit gets the character hp bonus")
 	assert(_count_side(battle, "player") == 0, "player board starts empty")
 	assert(battle._character_attack_bonus("player") == 1, "player character grants +1 attack")
-	assert(battle.board["enemy"][0][0].max_hp == 22, "enemy units get the character hp bonus")
 	var player_char_name: Label = battle.character_views["player"]["name"]
 	var enemy_char_name: Label = battle.character_views["enemy"]["name"]
 	assert(player_char_name.text == "你", "player character card is shown")
 	assert(enemy_char_name.text == "近战先遣官", "enemy character follows the level deck")
+
+	# 五关全部是单体敌人
+	for level_id in battle.LEVEL_ORDER:
+		battle.level_id = level_id
+		battle.restart_battle()
+		assert(_count_side(battle, "enemy") == 1, "level %s fields exactly one enemy" % level_id)
+		assert(battle._enemy_unit_limit() == 1, "level %s caps the enemy board at 1" % level_id)
+	battle.level_id = "CH1-01"
+	battle.restart_battle()
 
 	# 部署扣费与占位
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy van_001")
@@ -51,120 +63,146 @@ func _run() -> void:
 	assert(battle.board["player"][0][1] == null, "failed deploy leaves slot empty")
 	assert(battle.player_stamina == 4, "failed deploy does not spend stamina")
 
-	# 后排单位也能打到当前最前排
-	battle.restart_battle()
-	assert(battle.try_deploy("van_001", 0, 0, 2), "deploy unit in back")
+	# 目标选择：从后排放的单位也能打到最前排
+	_clear_boards(battle)
+	var poke_back = battle._create_unit("van_001", "player", 0, 2)
+	battle.board["player"][0][2] = poke_back
+	var poke_enemy = battle._create_unit("van_001", "enemy", 0, 0)
+	battle.board["enemy"][0][0] = poke_enemy
 	battle.start_battle()
 	battle.tick(0.1)
 	assert(String(battle.phase) == "battle", "still fighting")
-	assert(battle.board["enemy"][0][0].hp == 17, "back-row unit hits the front-most living row")
-
-	# 前排单位同样打最前排
-	battle.restart_battle()
-	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy unit in front")
-	battle.start_battle()
-	battle.tick(0.1)
-	assert(battle.board["enemy"][0][0].hp == 17, "front-row unit hits for 5")
+	assert(poke_enemy.hp == 17, "back-row unit hits the front-most living row")
 
 	# 正对面第一排有人：优先打正对的
-	battle.restart_battle()
-	assert(battle.try_deploy("van_001", 0, 1, 0), "deploy into the middle lane")
+	_clear_boards(battle)
+	var lane_enemy = battle._create_unit("van_001", "enemy", 1, 0)
+	var other_enemy = battle._create_unit("van_001", "enemy", 0, 0)
+	battle.board["enemy"][1][0] = lane_enemy
+	battle.board["enemy"][0][0] = other_enemy
+	var lane_player = battle._create_unit("van_001", "player", 1, 0)
+	battle.board["player"][1][0] = lane_player
 	battle.start_battle()
 	battle.tick(0.1)
-	assert(battle.board["enemy"][1][0].hp == 17, "same-lane front enemy is hit first")
-	assert(battle.board["enemy"][0][0].hp == 22, "upper-lane front enemy is not hit")
+	assert(lane_enemy.hp == 17, "same-lane front enemy is hit first")
+	assert(other_enemy.hp == 22, "upper-lane front enemy is not hit")
 
 	# 正对面第一排为空：按排从上到下打最前排
-	battle.level_id = "CH0-01"
-	battle.restart_battle()
-	var aero_char_name: Label = battle.character_views["enemy"]["name"]
-	assert(aero_char_name.text == "战术指挥官", "enemy character updates with the level deck")
-	assert(battle.try_deploy("van_001", 0, 2, 0), "deploy into enemy-free lane")
+	_clear_boards(battle)
+	var order_enemy_a = battle._create_unit("van_001", "enemy", 0, 0)
+	var order_enemy_b = battle._create_unit("van_001", "enemy", 1, 0)
+	battle.board["enemy"][0][0] = order_enemy_a
+	battle.board["enemy"][1][0] = order_enemy_b
+	var far_player = battle._create_unit("van_001", "player", 2, 0)
+	battle.board["player"][2][0] = far_player
 	battle.start_battle()
 	battle.tick(0.1)
-	assert(battle.board["enemy"][0][0].hp == 61, "upper-lane front enemy is hit first when the opposite row is empty")
-	assert(battle.board["enemy"][1][0].hp == 44, "mid-lane front enemy is not hit")
+	assert(order_enemy_a.hp == 17, "upper-lane front enemy is hit first when the opposite row is empty")
+	assert(order_enemy_b.hp == 22, "mid-lane front enemy is not hit")
 
 	# 本路前排为空：先按排从上到下打最前排
-	battle.level_id = "CH1-01"
-	battle.restart_battle()
-	var own_lane_enemy = battle.board["enemy"][1][0]
-	battle.board["enemy"][1][0] = null
-	battle.board["enemy"][1][2] = own_lane_enemy
-	own_lane_enemy.row = 2
-	assert(battle.try_deploy("van_001", 0, 1, 0), "deploy range-1 unit in front")
+	_clear_boards(battle)
+	var deep_enemy = battle._create_unit("van_001", "enemy", 1, 2)
+	var shallow_enemy = battle._create_unit("van_001", "enemy", 0, 0)
+	battle.board["enemy"][1][2] = deep_enemy
+	battle.board["enemy"][0][0] = shallow_enemy
+	var picker = battle._create_unit("van_001", "player", 1, 0)
+	battle.board["player"][1][0] = picker
 	battle.start_battle()
 	battle.tick(0.1)
-	assert(battle.board["enemy"][0][0].hp == 17, "front-most occupied row is attacked in lane order")
-	assert(battle.board["enemy"][1][2].hp == 22, "deep enemy in our lane is not hit while a front row exists")
+	assert(shallow_enemy.hp == 17, "front-most occupied row is attacked in lane order")
+	assert(deep_enemy.hp == 22, "deep enemy in our lane is not hit while a front row exists")
 
 	# 后排重型单位打得到
-	battle.player_deck_id = "bastion"
-	battle.restart_battle()
-	assert(battle.try_deploy("bas_001", 0, 0, 2), "deploy heavy unit in back")
+	_clear_boards(battle)
+	var heavy_enemy = battle._create_unit("van_001", "enemy", 0, 0)
+	battle.board["enemy"][0][0] = heavy_enemy
+	var heavy = battle._create_unit("bas_001", "player", 0, 2)
+	battle.board["player"][0][2] = heavy
 	battle.start_battle()
 	battle.tick(0.1)
-	assert(battle.board["enemy"][0][0].hp == 11, "back-row heavy unit hits for 11")
+	assert(heavy_enemy.hp == 11, "back-row heavy unit hits for 11")
 
 	# 无射程限制：前排全空时，近战单位也能跨排打后排
-	battle.player_deck_id = "vanguard"
-	battle.level_id = "CH1-01"
-	battle.restart_battle()
-	battle.board["enemy"][0][0] = null
-	battle.board["enemy"][1][0] = null
-	battle.board["enemy"][2][0] = null
-	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy melee unit with no enemy front row")
+	_clear_boards(battle)
+	var deep_only = battle._create_unit("van_001", "enemy", 2, 1)
+	battle.board["enemy"][2][1] = deep_only
+	var reach = battle._create_unit("van_001", "player", 0, 0)
+	battle.board["player"][0][0] = reach
 	battle.start_battle()
 	battle.tick(0.1)
-	assert(battle.board["enemy"][2][1].hp == 11, "melee unit reaches the next occupied row")
+	assert(deep_only.hp == 17, "melee unit reaches the next occupied row")
 
 	# 嘲讽
-	battle.player_deck_id = "vanguard"
-	battle.level_id = "CH1-S01"
-	battle.restart_battle()
-	assert(battle.try_deploy("van_005", 4, 0, 0), "deploy taunt unit in front")
-	assert(battle.try_deploy("van_001", 0, 0, 1), "deploy attacker in mid")
+	_clear_boards(battle)
+	var taunt_guard = battle._create_unit("van_005", "player", 0, 0)
+	battle.board["player"][0][0] = taunt_guard
+	var taunt_player_other = battle._create_unit("van_001", "player", 0, 1)
+	battle.board["player"][0][1] = taunt_player_other
+	var taunt_attacker = battle._create_unit("van_001", "enemy", 0, 0)
+	battle.board["enemy"][0][0] = taunt_attacker
 	battle.start_battle()
-	var side_attacker = battle.board["enemy"][0][0]
-	assert(String(side_attacker.card_id) == "aero_001", "side lane 0 front is aero_001")
-	var taunt_target = battle._find_target(side_attacker)
+	var taunt_target = battle._find_target(taunt_attacker)
 	assert(taunt_target != null, "taunt attacker has a target")
 	assert(String(taunt_target.card_id) == "van_005", "taunt unit is prioritized")
 
-	# 破防：无视嘲讽、优先后排
+	# 穿透：无视嘲讽、优先打最后排
+	_clear_boards(battle)
 	battle.level_id = "CH1-E01"
 	battle.restart_battle()
-	assert(battle.try_deploy("van_005", 4, 0, 0), "deploy taunt front for breaker test")
-	assert(battle.try_deploy("van_001", 0, 0, 2), "deploy back-line target")
+	_clear_boards(battle)
+	var pierce_guard = battle._create_unit("van_005", "player", 0, 0)
+	battle.board["player"][0][0] = pierce_guard
+	var pierce_back = battle._create_unit("van_001", "player", 0, 2)
+	battle.board["player"][0][2] = pierce_back
+	var breaker = battle._create_unit("solo_sniper", "enemy", 0, 0)
+	battle.board["enemy"][0][0] = breaker
 	battle.start_battle()
-	var breaker = battle.board["enemy"][0][0]
-	assert(String(breaker.card_id) == "bas_061", "elite breaker is bas_061")
 	assert(breaker.ignore_taunt, "breaker ignores taunt")
 	var breaker_target = battle._find_target(breaker)
 	assert(breaker_target != null, "breaker has a target")
 	assert(String(breaker_target.card_id) == "van_001", "breaker prefers the back row")
 
-	# BOSS 蓄力
+	# BOSS 蓄力：7 秒蓄力后一击 3 倍
 	battle.level_id = "CH0-B01"
 	battle.restart_battle()
-	var boss = battle.board["enemy"][0][0]
-	assert(String(boss.card_id) == "bas_059", "boss lane 0 front is bas_059")
-	assert(boss.charge_interval == 6.0, "boss has 6s charge")
-	assert(battle.try_deploy("van_005", 4, 0, 0), "deploy a defense unit in the boss lane")
+	var boss = battle.board["enemy"][1][1]
+	assert(String(boss.card_id) == "boss_referee", "boss is the custom referee unit")
+	assert(boss.charge_interval == 7.0, "boss has 7s charge")
+	assert(boss.phases.size() == 2, "boss carries two phase thresholds")
+	assert(battle.try_deploy("van_005", 4, 0, 0), "deploy a defense unit in front of the boss")
 	battle.start_battle()
-	for unit in battle._all_units():
-		if unit.side == "enemy" and unit != boss:
-			unit.cooldown = 999.0
 	boss.charge_timer = 0.01
 	battle.tick(0.1)
 	assert(not boss.charge_ready, "charge consumed on attack")
-	assert(battle.board["player"][0][0] == null, "charged hit deals 39 and kills the 33 hp defender")
+	assert(battle.board["player"][0][0] == null, "charged hit deals 42 and kills the 33 hp defender")
+
+	# BOSS 阶段：65% 破防、30% 压制
+	battle.restart_battle()
+	var boss_unit = battle._create_unit("boss_referee", "enemy", 1, 1)
+	_clear_boards(battle)
+	battle.board["enemy"][1][1] = boss_unit
+	var phase_guard = battle._create_unit("van_005", "player", 1, 0)
+	battle.board["player"][1][0] = phase_guard
+	battle.start_battle()
+	boss_unit.hp = int(boss_unit.max_hp * 0.6)
+	battle.tick(0.05)
+	assert(boss_unit.phase_index == 1, "boss enters phase 2 under 65% hp")
+	assert(boss_unit.damage == 13 + 1 + 4, "phase 2 adds 4 damage")
+	assert(is_equal_approx(boss_unit.interval, 2.1 * 0.85), "phase 2 speeds up the attack interval")
+	assert(boss_unit.ignore_taunt, "phase 2 unlocks pierce")
+	boss_unit.hp = int(boss_unit.max_hp * 0.29)
+	battle.tick(0.05)
+	assert(boss_unit.phase_index == 2, "boss enters phase 3 under 30% hp")
+	assert(boss_unit.damage == 13 + 1 + 4 + 6, "phase 3 adds 6 more damage")
+	assert(boss_unit.suppress_player_regen, "phase 3 suppresses player stamina regen")
+	assert(boss_unit.charge_interval == 5.0, "phase 3 shortens the charge")
 
 	# 支线压制：体力恢复减半
 	battle.level_id = "CH1-S01"
 	battle.restart_battle()
-	var suppressor = battle.board["enemy"][2][0]
-	assert(String(suppressor.card_id) == "aero_003", "side suppressor is aero_003")
+	var suppressor = battle.board["enemy"][1][1]
+	assert(String(suppressor.card_id) == "solo_frost", "side suppressor is the frost solo unit")
 	assert(suppressor.suppress_player_regen, "suppressor has regen suppression")
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy guard for suppression test")
 	battle.start_battle()
@@ -214,21 +252,15 @@ func _run() -> void:
 	battle.level_id = "CH1-01"
 	battle.restart_battle()
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy killer")
-	var enemy_front = battle.board["enemy"][0][0]
+	var enemy_front = battle.board["enemy"][1][1]
 	enemy_front.hp = 1
 	battle.start_battle()
 	battle.tick(0.1)
-	assert(battle.board["enemy"][0][0] == null, "dead unit leaves slot empty")
+	assert(battle.board["enemy"][1][1] == null, "dead unit leaves slot empty")
 	assert(not enemy_front.alive, "dead unit is marked dead")
 
 	# 亡语：同路第 1 条存活排承受 12 伤害，不跨路
-	battle.level_id = "CH1-01"
-	battle.player_deck_id = "vanguard"
-	battle.restart_battle()
-	for side in ["player", "enemy"]:
-		for lane in range(3):
-			for row in range(3):
-				battle.board[side][lane][row] = null
+	_clear_boards(battle)
 	var bomber = battle._create_unit("van_061", "player", 1, 0)
 	var bomber_victim = battle._create_unit("van_002", "enemy", 1, 1)
 	var bomber_control = battle._create_unit("van_001", "enemy", 0, 0)
@@ -243,12 +275,8 @@ func _run() -> void:
 
 	# 前排清空后单位不移动，攻击按存活排继续
 	battle.level_id = "CH1-01"
-	battle.player_deck_id = "vanguard"
 	battle.restart_battle()
-	for side in ["player", "enemy"]:
-		for lane in range(3):
-			for row in range(3):
-				battle.board[side][lane][row] = null
+	_clear_boards(battle)
 	var hold_player_mid = battle._create_unit("van_001", "player", 1, 1)
 	var hold_enemy_mid = battle._create_unit("van_001", "enemy", 1, 1)
 	battle.board["player"][1][1] = hold_player_mid
@@ -271,9 +299,9 @@ func _run() -> void:
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy unit for sudden death test")
 	battle.start_battle()
 	var player_front = battle.board["player"][0][0]
-	var sudden_enemy_front = battle.board["enemy"][0][0]
+	var sudden_enemy = battle.board["enemy"][1][1]
 	var player_hp_before: int = player_front.hp
-	var enemy_hp_before: int = sudden_enemy_front.hp
+	var enemy_hp_before: int = sudden_enemy.hp
 	for unit in battle._all_units():
 		unit.cooldown = 999.0
 	battle.battle_time = 89.999
@@ -282,7 +310,7 @@ func _run() -> void:
 	assert(player_front.hp == player_hp_before, "activation itself deals no damage")
 	battle.tick(2.1)
 	assert(player_front.hp == player_hp_before - 2, "sudden death damages player units")
-	assert(sudden_enemy_front.hp == enemy_hp_before - 2, "sudden death damages enemy units")
+	assert(sudden_enemy.hp == enemy_hp_before - 2, "sudden death damages enemy units")
 
 	# 手牌循环
 	battle.player_deck_id = "vanguard"
@@ -296,16 +324,14 @@ func _run() -> void:
 	var total_cards: int = battle.player_hand.size() + battle.player_draw_pile.size() + battle.player_discard.size()
 	assert(total_cards == 12, "twelve cards stay in the cycle")
 
-	# 敌方补位
-	battle.level_id = "CH0-01"
+	# 单体敌人：补位被关卡上限拦住
+	battle.level_id = "CH1-01"
 	battle.restart_battle()
-	assert(_count_side(battle, "enemy") == 2, "tutorial has 2 enemy units")
 	battle.start_battle()
 	battle.enemy_stamina = 100
-	battle.enemy_reinforce_timer = 999.0
 	battle._try_enemy_reinforce()
-	assert(_count_side(battle, "enemy") == 3, "enemy reinforcement fills a slot")
-	assert(battle.enemy_stamina == 85, "enemy pays aero_001 cost")
+	assert(_count_side(battle, "enemy") == 1, "single enemy level never adds a second unit")
+	assert(battle.enemy_stamina == 100, "blocked reinforcement spends no enemy stamina")
 
 	# 调整阵型：移动与交换（仅布阵阶段）
 	battle.level_id = "CH1-01"
@@ -345,7 +371,7 @@ func _run() -> void:
 	assert(first_player_unit != null, "player units exist for order test")
 	assert(int(first_player_unit.row) == 0, "front-row unit acts before back-row unit")
 
-	# 空场判负：敌方空场 3 秒
+	# 空场判胜：敌方空场 3 秒（单体关卡击杀即胜）
 	battle.level_id = "CH1-01"
 	battle.restart_battle()
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy guard for empty-enemy test")
@@ -480,17 +506,14 @@ func _run() -> void:
 	var mortar = battle._create_unit("bas_012", "player", 0, 0)
 	var healthy_target = battle._create_unit("van_005", "enemy", 0, 0)
 	assert(battle._effective_damage(mortar, healthy_target) == 18, "healthy-target bonus adds damage")
-	var taunt_guard = battle._create_unit("van_005", "player", 0, 0)
-	battle.board["player"][0][0] = taunt_guard
+	var siege_guard = battle._create_unit("van_005", "player", 0, 0)
+	battle.board["player"][0][0] = siege_guard
 	var siege = battle._create_unit("bas_013", "player", 0, 2)
 	assert(battle._effective_damage(siege) == 20, "taunt-front bonus adds damage")
 
 	# 光环叠加：同路前后相邻排的战术单位同时生效
 	battle.restart_battle()
-	for side in ["player", "enemy"]:
-		for lane in range(3):
-			for row in range(3):
-				battle.board[side][lane][row] = null
+	_clear_boards(battle)
 	var aura_mid = battle._create_unit("van_001", "player", 1, 1)
 	var aura_front = battle._create_unit("van_006", "player", 1, 0)
 	var aura_back = battle._create_unit("aero_048", "player", 1, 2)
@@ -506,10 +529,7 @@ func _run() -> void:
 
 	# 资源单位软上限：同方只有最早部署的 2 个产费
 	battle.restart_battle()
-	for side in ["player", "enemy"]:
-		for lane in range(3):
-			for row in range(3):
-				battle.board[side][lane][row] = null
+	_clear_boards(battle)
 	var res_first = battle._create_unit("aero_005", "player", 0, 2)
 	var res_second = battle._create_unit("aero_034", "player", 1, 2)
 	var res_third = battle._create_unit("aero_039", "player", 2, 2)
@@ -536,6 +556,13 @@ func _run() -> void:
 	battle.queue_free()
 	print("formation smoke ok")
 	quit()
+
+
+func _clear_boards(battle) -> void:
+	for side in ["player", "enemy"]:
+		for lane in range(3):
+			for row in range(3):
+				battle.board[side][lane][row] = null
 
 
 func _count_side(battle, side: String) -> int:
