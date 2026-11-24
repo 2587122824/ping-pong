@@ -827,46 +827,59 @@ func _build_ui() -> void:
 	level_label = Label.new()
 	level_label.text = ""
 	top.add_child(level_label)
-	hp_label = Label.new()
-	top.add_child(hp_label)
-	enemy_hp_label = Label.new()
-	top.add_child(enemy_hp_label)
-	stamina_bar = ProgressBar.new()
-	stamina_bar.max_value = STAMINA_MAX
-	stamina_bar.custom_minimum_size = Vector2(160, 18)
-	top.add_child(stamina_bar)
-	stamina_label = Label.new()
-	top.add_child(stamina_label)
 	timer_label = Label.new()
 	top.add_child(timer_label)
 
-	var grid := GridContainer.new()
-	grid.columns = LANES * 2 + 3
-	main.add_child(grid)
+	var status := HBoxContainer.new()
+	status.add_theme_constant_override("separation", 12)
+	main.add_child(status)
+	hp_label = Label.new()
+	status.add_child(hp_label)
+	enemy_hp_label = Label.new()
+	status.add_child(enemy_hp_label)
+	stamina_bar = ProgressBar.new()
+	stamina_bar.max_value = STAMINA_MAX
+	stamina_bar.custom_minimum_size = Vector2(160, 18)
+	status.add_child(stamina_bar)
+	stamina_label = Label.new()
+	status.add_child(stamina_label)
+
+	var board_box := VBoxContainer.new()
+	board_box.add_theme_constant_override("separation", 6)
+	main.add_child(board_box)
 	slot_buttons = {"player": [], "enemy": []}
 	for lane in range(LANES):
+		var lane_row := HBoxContainer.new()
+		lane_row.add_theme_constant_override("separation", 6)
+		board_box.add_child(lane_row)
 		var lane_label := Label.new()
 		lane_label.text = ["上路", "中路", "下路"][lane]
 		lane_label.custom_minimum_size = Vector2(40, 54)
-		grid.add_child(lane_label)
+		lane_row.add_child(lane_label)
+		var p_box := HBoxContainer.new()
+		p_box.add_theme_constant_override("separation", 4)
+		lane_row.add_child(p_box)
 		var player_slots: Array = []
 		for col in range(ROWS):
 			var row := ROWS - 1 - col
 			var button := _make_slot_button("player", lane, row)
-			grid.add_child(button)
+			p_box.add_child(button)
 			player_slots.append(button)
 		slot_buttons["player"].append(player_slots)
 		var bomb_label := Label.new()
 		bomb_label.text = "◆"
-		bomb_label.custom_minimum_size = Vector2(64, 54)
+		bomb_label.custom_minimum_size = Vector2(72, 54)
 		bomb_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		grid.add_child(bomb_label)
+		lane_row.add_child(bomb_label)
 		bomb_labels.append(bomb_label)
+		var e_box := HBoxContainer.new()
+		e_box.add_theme_constant_override("separation", 4)
+		lane_row.add_child(e_box)
 		var enemy_slots: Array = []
 		for col in range(ROWS):
 			var row := col
 			var button := _make_slot_button("enemy", lane, row)
-			grid.add_child(button)
+			e_box.add_child(button)
 			enemy_slots.append(button)
 		slot_buttons["enemy"].append(enemy_slots)
 
@@ -903,7 +916,7 @@ func _build_ui() -> void:
 
 func _make_slot_button(side: String, lane: int, row: int) -> Button:
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(96, 54)
+	button.custom_minimum_size = Vector2(64, 54)
 	button.add_theme_font_size_override("font_size", 10)
 	var zone := zone_of_row(row)
 	var tint := Color("#132436")
@@ -954,7 +967,7 @@ func _refresh() -> void:
 	stamina_bar.value = player_stamina
 	stamina_label.text = "体力 %d / %d" % [player_stamina, STAMINA_MAX]
 	timer_label.text = "回合 %.1f / %.0f s  %s" % [battle_time, BATTLE_LIMIT, _phase_text()]
-	level_label.text = String(LEVELS[level_id]["name"])
+	level_label.text = String(LEVELS[level_id]["special"])
 	for id in level_buttons:
 		level_buttons[id].modulate = Color("#7fe4dd") if String(id) == level_id else Color.WHITE
 	for lane in range(LANES):
