@@ -1,6 +1,7 @@
 # CH0-B01 首个 BOSS：裁判机兵（设计说明 v0.1）
 
-> 2026-11-24 · 对应实现：`prototype/formation_battle.gd` 中 `card_definitions["boss_referee"]` 与 `level_definitions["CH0-B01"]`
+> **状态：预留，当前版本不可进入。** 2026-11-24 关卡表收敛为「只打磨第一关 `CH0-01`（4 只小怪、无 BOSS）」，`CH0-B01` 关卡定义已删除，`boss_referee` 卡与三阶段引擎 `_apply_unit_phases()` 保留在代码中，等第二章入口确定后再启用。
+> 2026-11-24 · 对应实现：`prototype/formation_battle.gd` 中 `card_definitions["boss_referee"]`（关卡定义 `level_definitions["CH0-B01"]` 已移除）
 
 ## 1. 定位
 

@@ -6,13 +6,9 @@ extends SceneTree
 # & $env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe --headless --path prototype --script res://tests/balance_formation.gd
 
 const DECKS := ["vanguard", "aero", "bastion"]
-const LEVELS := ["CH0-01", "CH1-01", "CH1-E01", "CH0-B01", "CH1-S01"]
+const LEVELS := ["CH0-01"]
 const LEVEL_BUDGET := {
-	"CH0-01": 15,
-	"CH1-01": 35,
-	"CH1-E01": 55,
-	"CH0-B01": 75,
-	"CH1-S01": 55
+	"CH0-01": 15
 }
 const MODES := ["full_auto", "opening_only", "enemy_budget", "both", "paced_both", "paced3_both"]
 const RUNS := 6

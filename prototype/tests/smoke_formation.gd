@@ -14,30 +14,25 @@ func _run() -> void:
 	root.add_child(battle)
 	await process_frame
 
-	# 初始状态：每关只有 1 个敌方单位
+	# 初始状态：只开放第一关，敌方 4 个小怪
 	assert(String(battle.phase) == "deploy", "starts in deploy phase")
 	assert(battle.player_stamina == 100, "stamina starts at 100")
 	assert(battle.player_hand.size() == 5, "hand starts with 5")
 	assert(battle.player_draw_pile.size() == 7, "rest of the 12-card deck in draw pile")
-	assert(_count_side(battle, "enemy") == 1, "normal level has a single enemy unit")
-	assert(battle._enemy_unit_limit() == 1, "level caps the enemy board at 1 unit")
-	assert(not bool(battle.level_definitions["CH1-01"]["enemy_reinforce"]), "single enemy levels do not reinforce")
-	assert(String(battle.board["enemy"][1][1].card_id) == "solo_bomber", "single enemy sits in the middle slot")
-	assert(battle.board["enemy"][1][1].max_hp == 352, "enemy unit gets the character hp bonus")
+	assert(battle.LEVEL_ORDER == ["CH0-01"], "only the first level is playable")
+	assert(battle.level_definitions.size() == 1, "the other four levels are removed")
+	assert(_count_side(battle, "enemy") == 4, "first level fields 4 enemies")
+	assert(String(battle.board["enemy"][1][0].card_id) == "aero_004", "mid-lane front enemy is the taunt guard")
+	assert(battle.board["enemy"][1][0].max_hp == 85, "enemy hp gets character bonus and level multiplier")
+	assert(String(battle.board["enemy"][1][1].card_id) == "aero_003", "first level keeps a disrupt unit in the back")
 	assert(_count_side(battle, "player") == 0, "player board starts empty")
 	assert(battle._character_attack_bonus("player") == 1, "player character grants +1 attack")
 	var player_char_name: Label = battle.character_views["player"]["name"]
 	var enemy_char_name: Label = battle.character_views["enemy"]["name"]
 	assert(player_char_name.text == "你", "player character card is shown")
-	assert(enemy_char_name.text == "近战先遣官", "enemy character follows the level deck")
-
-	# 五关全部是单体敌人
-	for level_id in battle.LEVEL_ORDER:
-		battle.level_id = level_id
-		battle.restart_battle()
-		assert(_count_side(battle, "enemy") == 1, "level %s fields exactly one enemy" % level_id)
-		assert(battle._enemy_unit_limit() == 1, "level %s caps the enemy board at 1" % level_id)
-	battle.level_id = "CH1-01"
+	assert(enemy_char_name.text == "战术指挥官", "enemy character follows the level deck")
+	# 后续用手工布阵验证通用规则，先把关卡生命倍率归 1，避免数值被关卡系数污染
+	battle.level_definitions["CH0-01"]["enemy_hp_multiplier"] = 1.0
 	battle.restart_battle()
 
 	# 部署扣费与占位
@@ -148,14 +143,14 @@ func _run() -> void:
 
 	# 穿透：无视嘲讽、优先打最后排
 	_clear_boards(battle)
-	battle.level_id = "CH1-E01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	_clear_boards(battle)
 	var pierce_guard = battle._create_unit("van_005", "player", 0, 0)
 	battle.board["player"][0][0] = pierce_guard
 	var pierce_back = battle._create_unit("van_001", "player", 0, 2)
 	battle.board["player"][0][2] = pierce_back
-	var breaker = battle._create_unit("solo_sniper", "enemy", 0, 0)
+	var breaker = battle._create_unit("bas_061", "enemy", 0, 0)
 	battle.board["enemy"][0][0] = breaker
 	battle.start_battle()
 	assert(breaker.ignore_taunt, "breaker ignores taunt")
@@ -163,10 +158,10 @@ func _run() -> void:
 	assert(breaker_target != null, "breaker has a target")
 	assert(String(breaker_target.card_id) == "van_001", "breaker prefers the back row")
 
-	# BOSS 蓄力：7 秒蓄力后一击 3 倍
-	battle.level_id = "CH0-B01"
-	battle.restart_battle()
-	var boss = battle.board["enemy"][1][1]
+	# BOSS 蓄力：7 秒蓄力后一击 3 倍（BOSS 单位暂时不设关卡，用卡定义直接验证）
+	_clear_boards(battle)
+	var boss = battle._create_unit("boss_referee", "enemy", 1, 1)
+	battle.board["enemy"][1][1] = boss
 	assert(String(boss.card_id) == "boss_referee", "boss is the custom referee unit")
 	assert(boss.charge_interval == 7.0, "boss has 7s charge")
 	assert(boss.phases.size() == 2, "boss carries two phase thresholds")
@@ -198,24 +193,16 @@ func _run() -> void:
 	assert(boss_unit.suppress_player_regen, "phase 3 suppresses player stamina regen")
 	assert(boss_unit.charge_interval == 5.0, "phase 3 shortens the charge")
 
-	# 支线压制：体力恢复减半
-	battle.level_id = "CH1-S01"
-	battle.restart_battle()
-	var suppressor = battle.board["enemy"][1][1]
-	assert(String(suppressor.card_id) == "solo_frost", "side suppressor is the frost solo unit")
-	assert(suppressor.suppress_player_regen, "suppressor has regen suppression")
-	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy guard for suppression test")
-	battle.start_battle()
+	# 阶段 3 的压制：玩家体力恢复减半
 	for unit in battle._all_units():
 		unit.cooldown = 999.0
 	battle.enemy_reinforce_timer = -9999.0
 	battle.player_stamina = 0
 	battle.player_stamina_timer = 0.0
 	battle.tick(10.1)
-	assert(battle.player_stamina == 10, "suppressed regen is 10 per 10s")
+	assert(battle.player_stamina == 10, "phase 3 suppresses regen to 10 per 10s")
 
 	# 体力恢复与上限
-	battle.level_id = "CH1-01"
 	battle.restart_battle()
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy guard for regen test")
 	battle.start_battle()
@@ -249,14 +236,14 @@ func _run() -> void:
 
 	# 击破与空位
 	battle.player_deck_id = "vanguard"
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy killer")
-	var enemy_front = battle.board["enemy"][1][1]
+	var enemy_front = battle.board["enemy"][0][0]
 	enemy_front.hp = 1
 	battle.start_battle()
 	battle.tick(0.1)
-	assert(battle.board["enemy"][1][1] == null, "dead unit leaves slot empty")
+	assert(battle.board["enemy"][0][0] == null, "dead unit leaves slot empty")
 	assert(not enemy_front.alive, "dead unit is marked dead")
 
 	# 亡语：同路第 1 条存活排承受 12 伤害，不跨路
@@ -274,7 +261,7 @@ func _run() -> void:
 	assert(bomber_control.hp == 22, "deathrattle does not cross lanes")
 
 	# 前排清空后单位不移动，攻击按存活排继续
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	_clear_boards(battle)
 	var hold_player_mid = battle._create_unit("van_001", "player", 1, 1)
@@ -294,7 +281,7 @@ func _run() -> void:
 	assert(hold_player_mid.hp < hold_player_hp, "enemy unit hits our front-most living row")
 
 	# 突然死亡：全场单位每 2 秒 -2
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy unit for sudden death test")
 	battle.start_battle()
@@ -314,7 +301,7 @@ func _run() -> void:
 
 	# 手牌循环
 	battle.player_deck_id = "vanguard"
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	var slots := [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1]]
 	for slot in slots:
@@ -324,17 +311,30 @@ func _run() -> void:
 	var total_cards: int = battle.player_hand.size() + battle.player_draw_pile.size() + battle.player_discard.size()
 	assert(total_cards == 12, "twelve cards stay in the cycle")
 
-	# 单体敌人：补位被关卡上限拦住
-	battle.level_id = "CH1-01"
+	# 敌方补位机制仍可用：临时打开开关后填一格
+	battle.level_definitions["CH0-01"]["enemy_reinforce"] = true
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	battle.start_battle()
 	battle.enemy_stamina = 100
+	var reinforce_base := _count_side(battle, "enemy")
 	battle._try_enemy_reinforce()
-	assert(_count_side(battle, "enemy") == 1, "single enemy level never adds a second unit")
+	assert(_count_side(battle, "enemy") == reinforce_base + 1, "enemy reinforcement fills one empty slot")
+	assert(battle.enemy_stamina < 100, "enemy reinforcement spends stamina")
+
+	# 第一关默认关闭补位：数量不变，也不扣敌方体力
+	battle.level_definitions["CH0-01"]["enemy_reinforce"] = false
+	battle.level_id = "CH0-01"
+	battle.restart_battle()
+	battle.start_battle()
+	battle.enemy_stamina = 100
+	var closed_base := _count_side(battle, "enemy")
+	battle._try_enemy_reinforce()
+	assert(_count_side(battle, "enemy") == closed_base, "first level never adds a unit")
 	assert(battle.enemy_stamina == 100, "blocked reinforcement spends no enemy stamina")
 
 	# 调整阵型：移动与交换（仅布阵阶段）
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	var move_index: int = battle.player_hand.find("van_001")
 	assert(battle.try_deploy("van_001", move_index, 0, 0), "deploy unit to move")
@@ -372,7 +372,7 @@ func _run() -> void:
 	assert(int(first_player_unit.row) == 0, "front-row unit acts before back-row unit")
 
 	# 空场判胜：敌方空场 3 秒（单体关卡击杀即胜）
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy guard for empty-enemy test")
 	battle.start_battle()
@@ -412,9 +412,13 @@ func _run() -> void:
 	battle._refresh_dynamic_ui()
 	assert(not battle.empty_warning_panel.visible, "warning hides after the loss")
 
-	# 空场计时在部署后归零
+	# 空场计时在部署后归零（先清空敌方，避免新单位在 0.1 秒内被集火打死）
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	battle.start_battle()
+	for lane in range(3):
+		for row in range(3):
+			battle.board["enemy"][lane][row] = null
 	battle.tick(2.0)
 	assert(battle.player_empty_timer > 1.9, "empty timer accumulates")
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy unit mid-battle")
@@ -423,7 +427,7 @@ func _run() -> void:
 	assert(String(battle.phase) == "battle", "deployed side stays in battle")
 
 	# 双方同时空场：按空场时间判定，同时空场则我方胜
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	battle.start_battle()
 	for side in ["player", "enemy"]:
@@ -439,7 +443,7 @@ func _run() -> void:
 	assert(String(battle.phase) == "won", "simultaneous empty boards favor the player")
 
 	# 体力归零不判负
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	assert(battle.try_deploy("van_001", 0, 0, 0), "deploy guard for zero-stamina test")
 	battle.start_battle()
@@ -462,7 +466,7 @@ func _run() -> void:
 	assert(battle.try_deploy("van_001", retry_index, 0, 0), "deploy works after restart")
 
 	# 一键布阵：只填空位，保留已上阵单位
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.player_deck_id = "vanguard"
 	battle.shuffle_on_reshuffle = true
 	battle.restart_battle()
@@ -491,7 +495,7 @@ func _run() -> void:
 
 	# 12 卡扩展机制接线
 	battle.player_deck_id = "vanguard"
-	battle.level_id = "CH1-01"
+	battle.level_id = "CH0-01"
 	battle.restart_battle()
 	var messenger = battle._create_unit("van_056", "player", 0, 2)
 	assert(messenger.resource_interval == 3.0, "per-card resource interval is wired")

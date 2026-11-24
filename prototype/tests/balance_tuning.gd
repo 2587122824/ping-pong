@@ -5,7 +5,7 @@ extends SceneTree
 # & $env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64_console.exe --headless --path prototype --script res://tests/balance_tuning.gd
 
 const DECKS := ["vanguard", "aero", "bastion"]
-const LEVELS := ["CH0-01", "CH1-01", "CH1-E01", "CH0-B01", "CH1-S01"]
+const LEVELS := ["CH0-01"]
 const RUNS := 8
 const MAX_SIM_SECONDS := 130.0
 const STEP := 0.1

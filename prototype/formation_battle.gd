@@ -23,14 +23,10 @@ const MAX_SIM_STEPS := 400
 const AURA_STACK_LIMIT := 2
 const RESOURCE_UNIT_LIMIT := 2
 
-const LEVEL_ORDER = ["CH0-01", "CH1-01", "CH1-E01", "CH0-B01", "CH1-S01"]
+const LEVEL_ORDER = ["CH0-01"]
 const DECK_ORDER = ["vanguard", "aero", "bastion"]
 const LEVEL_SHORT_NAMES = {
-	"CH0-01": "教学",
-	"CH1-01": "普通",
-	"CH1-E01": "精英",
-	"CH0-B01": "BOSS",
-	"CH1-S01": "支线"
+	"CH0-01": "第一关"
 }
 
 var card_definitions := {
@@ -55,11 +51,7 @@ var card_definitions := {
 	"van_061": {"name": "烈焰自爆兵", "role": "attack", "cost": 5, "hp": 15, "damage": 2, "interval": 1.2, "deathrattle": 12, "description": "亡语：对同路敌方第 1 条存活排造成 12 伤害。"},
 	"bas_061": {"name": "穿甲狙击手", "role": "attack", "cost": 18, "hp": 60, "damage": 11, "interval": 2.2, "pierce": true, "description": "穿透：无视嘲讽，优先攻击最后排。"},
 	"bas_059": {"name": "审判日加农炮", "role": "attack", "cost": 26, "hp": 92, "damage": 12, "interval": 2.4, "charge": 6.0, "description": "蓄力：每 6 秒，下一次攻击 3 倍伤害。"},
-	"solo_dummy": {"name": "训练木桩", "role": "attack", "cost": 0, "hp": 260, "damage": 6, "interval": 2.6, "description": "教学用单体靶机：不倒、不补位，只做基础还击。"},
-	"solo_bomber": {"name": "烈焰自爆兵", "role": "attack", "cost": 0, "hp": 320, "damage": 8, "interval": 1.6, "deathrattle": 20, "description": "亡语：退场时对同路第 1 条存活排造成 20 伤害。"},
-	"solo_sniper": {"name": "穿甲狙击手", "role": "attack", "cost": 0, "hp": 520, "damage": 12, "interval": 2.2, "pierce": true, "description": "穿透：无视嘲讽，优先攻击最后排。"},
-	"solo_frost": {"name": "冰霜术士", "role": "disrupt", "cost": 0, "hp": 460, "damage": 8, "interval": 1.8, "suppress_regen": true, "description": "压制：存活时玩家体力恢复减半；命中使目标间隔 +50%。"},
-	"boss_referee": {"name": "裁判机兵", "role": "attack", "cost": 0, "hp": 1400, "damage": 13, "interval": 2.1, "charge": 7.0, "description": "【蓄力】每 7 秒，下一次攻击 3 倍。生命降到 65% / 30% 时进入第二、第三阶段：破防、压制、蓄力提速。",
+	"boss_referee": {"name": "裁判机兵", "role": "attack", "cost": 0, "hp": 1400, "damage": 13, "interval": 2.1, "charge": 7.0, "description": "【预留 BOSS·未启用】蓄力 7 秒 3 倍；生命 65% / 30% 进入破防、压制两阶段。",
 		"phases": [
 			{"hp_ratio": 0.65, "damage_add": 4, "interval_mult": 0.85, "pierce": true, "label": "第二阶段 · 破防"},
 			{"hp_ratio": 0.30, "damage_add": 6, "interval_mult": 0.75, "suppress_regen": true, "charge": 5.0, "label": "第三阶段 · 压制"}
@@ -101,48 +93,15 @@ var deck_definitions := {
 
 var level_definitions := {
 	"CH0-01": {
-		"name": "新兵试炼 · 教学", "type": "教学", "enemy_deck": "aero",
-		"enemy_limit": 1, "enemy_reinforce": false,
-		"special": "单体靶机：不倒、不补位，只做基础还击",
-		"hint": "对手只有一台训练木桩。把输出集中到它身上，前排留 1–2 个低血单位挨打即可。",
+		"name": "新兵试炼 · 第一关", "type": "教学", "enemy_deck": "aero",
+		"enemy_hp_multiplier": 1.3, "enemy_reinforce": false,
+		"special": "嘲讽前排 + 两翼射手 + 后排减速：第一次完整的三角色对位，无 BOSS",
+		"hint": "中路是嘲讽盾卫，会先吃掉你的攻击；两翼射手持续输出，后排术士命中会减速。先破中路盾卫，再集火射手；每路前排都别空着。",
 		"formation": [
-			{"card": "solo_dummy", "lane": 1, "row": 1}
-		]
-	},
-	"CH1-01": {
-		"name": "前线遭遇 · 普通", "type": "普通", "enemy_deck": "vanguard",
-		"enemy_limit": 1, "enemy_reinforce": false,
-		"special": "亡语：烈焰自爆兵被击破时对同路第 1 存活排造成 20 伤害",
-		"hint": "它倒下时会炸同路第 1 条存活排。同路前排别放残血单位，或先把低血单位挪开这一路。",
-		"formation": [
-			{"card": "solo_bomber", "lane": 1, "row": 1}
-		]
-	},
-	"CH1-E01": {
-		"name": "破阵狙击 · 精英", "type": "精英", "enemy_deck": "bastion",
-		"enemy_limit": 1, "enemy_reinforce": false,
-		"special": "穿透：穿甲狙击手无视嘲讽，优先打最后排",
-		"hint": "它会绕过嘲讽直取后排。后排放高血单位，或把它挡在换位之外先集火。",
-		"formation": [
-			{"card": "solo_sniper", "lane": 1, "row": 1}
-		]
-	},
-	"CH0-B01": {
-		"name": "裁判机兵 · BOSS", "type": "BOSS", "enemy_deck": "bastion",
-		"enemy_limit": 1, "enemy_reinforce": false,
-		"special": "三阶段单体：蓄力 3 倍 → 破防穿透 → 压制恢复",
-		"hint": "它打空场只有 13 / 2.1s，但每 7 秒蓄力一次 3 倍。血量 65% 起穿透后排、30% 起把你体力恢复减半，越拖越难。",
-		"formation": [
-			{"card": "boss_referee", "lane": 1, "row": 1}
-		]
-	},
-	"CH1-S01": {
-		"name": "寂静力场 · 支线", "type": "支线", "enemy_deck": "aero",
-		"enemy_limit": 1, "enemy_reinforce": false,
-		"special": "压制：冰霜术士存活时玩家体力恢复减半",
-		"hint": "它让你体力恢复减半，还带减速。改用低费牌或先靠资源单位撑住补位。",
-		"formation": [
-			{"card": "solo_frost", "lane": 1, "row": 1}
+			{"card": "aero_004", "lane": 1, "row": 0},
+			{"card": "aero_001", "lane": 0, "row": 0},
+			{"card": "aero_002", "lane": 2, "row": 0},
+			{"card": "aero_003", "lane": 1, "row": 1}
 		]
 	}
 }
@@ -168,7 +127,7 @@ var ui_enabled := true
 var speed_multiplier := 1.0
 var shuffle_on_reshuffle := true
 
-var level_id := "CH1-01"
+var level_id := "CH0-01"
 var player_deck_id := "vanguard"
 var player_stamina := START_STAMINA
 var enemy_stamina := 0
@@ -618,7 +577,10 @@ func _create_unit(card_id: String, side: String, lane: int, row: int):
 	unit.lane = lane
 	unit.row = row
 	unit.role = String(def["role"])
-	unit.max_hp = int(floor(float(def["hp"]) * (1.0 + float(character.get("hp_ratio", 0.0)))))
+	var level_hp_mult := 1.0
+	if side == "enemy":
+		level_hp_mult = float(level_definitions.get(level_id, {}).get("enemy_hp_multiplier", 1.0))
+	unit.max_hp = int(floor(float(def["hp"]) * (1.0 + float(character.get("hp_ratio", 0.0))) * level_hp_mult))
 	unit.hp = unit.max_hp
 	unit.damage = int(def.get("damage", 0)) + int(character.get("attack_bonus", 0))
 	unit.interval = float(def.get("interval", 1.0))
@@ -654,8 +616,6 @@ func _create_unit(card_id: String, side: String, lane: int, row: int):
 		unit.charge_interval = charge_time
 		unit.charge_timer = charge_time
 		unit.charge_ready = false
-	if side == "enemy" and level_id == "CH1-S01" and card_id == "aero_003":
-		unit.suppress_player_regen = true
 	return unit
 
 
@@ -783,7 +743,7 @@ func _count_units_in_lane(side: String, lane: int) -> int:
 
 
 func _enemy_unit_limit() -> int:
-	return int(level_definitions[level_id].get("enemy_limit", 3))
+	return int(level_definitions[level_id].get("enemy_limit", 9))
 
 
 func _apply_unit_phases(unit) -> void:
