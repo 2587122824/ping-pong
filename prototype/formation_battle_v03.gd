@@ -205,6 +205,12 @@ var hand_buttons: Array = []
 var level_buttons := {}
 var start_button: Button
 var auto_button: Button
+var drag_label: Label
+
+# 拖拽部署状态
+var drag_card := -1
+var drag_active := false
+var drag_start := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -881,18 +887,27 @@ func _build_world() -> void:
 	add_child(sun)
 
 	battle_camera = Camera3D.new()
-	battle_camera.fov = 55.0
+	battle_camera.fov = 50.0
 	add_child(battle_camera)
-	battle_camera.position = Vector3(0.0, 13.5, 11.5)
+	battle_camera.position = Vector3(0.0, 12.5, 10.5)
 	battle_camera.look_at(Vector3(0.0, 0.0, 0.0))
 	battle_camera.current = true
+
+	# 台面底座外框
+	var frame := MeshInstance3D.new()
+	var frame_box := BoxMesh.new()
+	frame_box.size = Vector3(15.9, 0.18, 7.8)
+	frame.mesh = frame_box
+	frame.material_override = _material(Color("#0a1420"))
+	frame.position = Vector3(0.0, -0.22, 0.0)
+	add_child(frame)
 
 	# 台面
 	table_mesh = MeshInstance3D.new()
 	var table_box := BoxMesh.new()
 	table_box.size = Vector3(15.5, 0.3, 7.4)
 	table_mesh.mesh = table_box
-	table_mesh.material_override = _material(Color("#0d1826"))
+	table_mesh.material_override = _material(Color("#122338"))
 	table_mesh.position = Vector3(0.0, -0.15, 0.0)
 	add_child(table_mesh)
 
@@ -901,7 +916,7 @@ func _build_world() -> void:
 	var center_box := BoxMesh.new()
 	center_box.size = Vector3(0.12, 0.02, 7.0)
 	center_line.mesh = center_box
-	center_line.material_override = _material(Color("#2b4058"), true)
+	center_line.material_override = _material(Color("#35567a"), true)
 	center_line.position = Vector3(0.0, 0.01, 0.0)
 	add_child(center_line)
 
@@ -954,7 +969,10 @@ func _build_world() -> void:
 	bomb_sphere.radius = 0.42
 	bomb_sphere.height = 0.84
 	bomb_node.mesh = bomb_sphere
-	bomb_material = _material(Color("#262c34"))
+	bomb_material = StandardMaterial3D.new()
+	bomb_material.albedo_color = Color("#262c34")
+	bomb_material.metallic = 0.6
+	bomb_material.roughness = 0.35
 	bomb_node.material_override = bomb_material
 	bomb_node.position = Vector3(0.0, 0.42, LANE_Z[1])
 	add_child(bomb_node)
@@ -988,33 +1006,90 @@ func _build_world() -> void:
 func _zone_color(zone: String) -> Color:
 	match zone:
 		"near":
-			return Color("#1b3d57")
+			return Color("#21486a")
 		"mid":
-			return Color("#172c40")
+			return Color("#1d3550")
 		"far":
-			return Color("#132033")
-	return Color("#172c40")
+			return Color("#18283d")
+	return Color("#1d3550")
 
 
 func _input(event: InputEvent) -> void:
 	if battle_camera == null:
 		return
-	if not (event is InputEventMouseButton) or not event.pressed or event.button_index != MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			_on_mouse_down(event)
+		else:
+			_on_mouse_up(event)
+	elif event is InputEventMouseMotion and drag_card >= 0:
+		if not drag_active and event.position.distance_to(drag_start) > 10.0:
+			drag_active = true
+		if drag_active:
+			_show_drag_label(String(hand[drag_card]), event.position)
+
+
+func _on_mouse_down(event: InputEventMouseButton) -> void:
+	var hovered := get_viewport().gui_get_hovered_control()
+	if hovered != null and hovered.has_meta("hand_index"):
+		drag_card = int(hovered.get_meta("hand_index"))
+		drag_start = event.position
+		drag_active = false
 		return
-	# 点在 2D 控件（手牌/按钮）上时不走 3D 槽位射线
-	if get_viewport().gui_get_hovered_control() != null:
+	# 点在其他 2D 控件（按钮/标签）上时不穿透到 3D 槽位
+	if hovered != null:
 		return
-	var ray = battle_camera.get_screen_ray(event.position)
+	var slot := _pick_slot(event.position)
+	if not slot.is_empty():
+		_on_slot(String(slot["side"]), int(slot["lane"]), int(slot["row"]))
+
+
+func _on_mouse_up(event: InputEventMouseButton) -> void:
+	if drag_card < 0:
+		return
+	if drag_active:
+		var hovered_up := get_viewport().gui_get_hovered_control()
+		var over_gui := hovered_up != null and not hovered_up.has_meta("hand_index")
+		if not over_gui:
+			var slot := _pick_slot(event.position)
+			if not slot.is_empty() and String(slot["side"]) == "player":
+				try_deploy(String(hand[drag_card]), drag_card, int(slot["lane"]), int(slot["row"]))
+	else:
+		_on_hand_pressed(drag_card)
+	drag_card = -1
+	drag_active = false
+	_hide_drag_label()
+
+
+func _pick_slot(screen_pos: Vector2) -> Dictionary:
+	var ray = battle_camera.get_screen_ray(screen_pos)
 	var space := get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(ray.origin, ray.origin + ray.direction * 30.0)
 	query.collide_with_areas = true
 	var hit := space.intersect_ray(query)
 	if hit.is_empty():
-		return
+		return {}
 	var collider: Object = hit.collider
 	if collider == null or not collider.has_meta("side"):
+		return {}
+	return {
+		"side": String(collider.get_meta("side")),
+		"lane": int(collider.get_meta("lane")),
+		"row": int(collider.get_meta("row"))
+	}
+
+
+func _show_drag_label(card_name: String, pos: Vector2) -> void:
+	if drag_label == null:
 		return
-	_on_slot(String(collider.get_meta("side")), int(collider.get_meta("lane")), int(collider.get_meta("row")))
+	drag_label.text = card_name
+	drag_label.position = pos + Vector2(12, -10)
+	drag_label.visible = true
+
+
+func _hide_drag_label() -> void:
+	if drag_label != null:
+		drag_label.visible = false
 
 
 func _token_color(unit) -> Color:
@@ -1043,9 +1118,21 @@ func _sync_tokens() -> void:
 					token.material_override = StandardMaterial3D.new()
 					token.position = _slot_position(side, lane, row) + Vector3(0.0, 0.42, 0.0)
 					add_child(token)
+					# 棋子底座圆盘
+					var base := MeshInstance3D.new()
+					var base_cyl := CylinderMesh.new()
+					base_cyl.top_radius = 0.34
+					base_cyl.bottom_radius = 0.34
+					base_cyl.height = 0.08
+					base.mesh = base_cyl
+					base.material_override = StandardMaterial3D.new()
+					base.position = Vector3(0.0, -0.38, 0.0)
+					token.add_child(base)
 					tokens[side][lane][row] = token
 				var mat: StandardMaterial3D = token.material_override
 				mat.albedo_color = _token_color(unit)
+				var base_mat: StandardMaterial3D = token.get_child(0).material_override
+				base_mat.albedo_color = _token_color(unit).darkened(0.55)
 				# 扣顶小标识：靠近相机一侧压低棋子高度，远台略小，形成纵深
 				var scale := 1.0 - row * 0.03
 				token.scale = Vector3(scale, scale, scale)
@@ -1107,14 +1194,23 @@ func _build_ui() -> void:
 	main.add_theme_constant_override("separation", 8)
 	root.add_child(main)
 
+	var header := PanelContainer.new()
+	header.add_theme_stylebox_override("panel", _flat(Color("#142233e6"), Color("#2c4258"), 12))
+	var header_vbox := VBoxContainer.new()
+	header_vbox.add_theme_constant_override("separation", 8)
+	header.add_child(header_vbox)
+	main.add_child(header)
+
 	# 顶部第一行：关卡切换 + 能力说明 + 计时
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 10)
-	main.add_child(top)
+	header_vbox.add_child(top)
 	for id in LEVELS.keys():
 		var button := Button.new()
 		button.text = String(LEVELS[id]["name"]).split(" · ")[1]
 		button.custom_minimum_size = Vector2(96, 34)
+		button.add_theme_stylebox_override("normal", _flat(Color("#1c2c40"), Color("#31495c"), 8))
+		button.add_theme_stylebox_override("hover", _flat(Color("#243850"), Color("#3f5d78"), 8))
 		button.pressed.connect(_on_level.bind(String(id)))
 		level_buttons[id] = button
 		top.add_child(button)
@@ -1133,7 +1229,7 @@ func _build_ui() -> void:
 	# 顶部第二行：双方生命条 + 我方体力条
 	var status := HBoxContainer.new()
 	status.add_theme_constant_override("separation", 16)
-	main.add_child(status)
+	header_vbox.add_child(status)
 	player_hp_label = Label.new()
 	player_hp_label.custom_minimum_size = Vector2(150, 22)
 	status.add_child(player_hp_label)
@@ -1170,9 +1266,16 @@ func _build_ui() -> void:
 		var button := Button.new()
 		button.custom_minimum_size = Vector2(236, 104)
 		button.add_theme_font_size_override("font_size", 14)
-		button.pressed.connect(_on_hand_pressed.bind(i))
+		button.set_meta("hand_index", i)
 		hand_buttons.append(button)
 		hand_row.add_child(button)
+
+	drag_label = Label.new()
+	drag_label.add_theme_font_size_override("font_size", 16)
+	drag_label.add_theme_color_override("font_color", Color("#eaf6ff"))
+	drag_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	drag_label.visible = false
+	root.add_child(drag_label)
 
 	# 底部操作 + 日志
 	var bottom := HBoxContainer.new()
@@ -1181,11 +1284,15 @@ func _build_ui() -> void:
 	auto_button = Button.new()
 	auto_button.text = "自动布阵"
 	auto_button.custom_minimum_size = Vector2(110, 38)
+	auto_button.add_theme_stylebox_override("normal", _flat(Color("#1c2c40"), Color("#31495c"), 8))
+	auto_button.add_theme_stylebox_override("hover", _flat(Color("#243850"), Color("#3f5d78"), 8))
 	auto_button.pressed.connect(func(): auto_deploy())
 	bottom.add_child(auto_button)
 	start_button = Button.new()
 	start_button.text = "开战 / 重开"
 	start_button.custom_minimum_size = Vector2(130, 38)
+	start_button.add_theme_stylebox_override("normal", _flat(Color("#173a36"), Color("#34d399"), 8))
+	start_button.add_theme_stylebox_override("hover", _flat(Color("#1e4a43"), Color("#6ee7b7"), 8))
 	start_button.pressed.connect(_on_start)
 	bottom.add_child(start_button)
 	feedback_label = Label.new()
@@ -1288,13 +1395,19 @@ func _refresh() -> void:
 			main_line, "可出牌" if afford else "体力不足"
 		]
 		button.disabled = false
-		var bg := Color("#172635") if afford else Color("#111a23")
-		var border := type_color if selected else (Color("#31495c") if afford else Color("#24313b"))
-		button.add_theme_stylebox_override("normal", _flat(bg, border))
-		button.add_theme_stylebox_override("hover", _flat(bg.lightened(0.08), border))
-		button.add_theme_stylebox_override("pressed", _flat(bg.darkened(0.08), border))
-		button.add_theme_stylebox_override("disabled", _flat(Color("#111a23"), Color("#24313b")))
+		var bg := Color("#1c2c40") if afford else Color("#131d2b")
+		if selected:
+			bg = bg.lightened(0.10)
+		var border := type_color if selected else (type_color.darkened(0.35) if afford else Color("#24313b"))
+		var border_w := 2 if selected else 1
+		var normal := _flat(bg, border, 10)
+		normal.set_border_width_all(border_w)
+		button.add_theme_stylebox_override("normal", normal)
+		button.add_theme_stylebox_override("hover", _flat(bg.lightened(0.07), border, 10))
+		button.add_theme_stylebox_override("pressed", _flat(bg.darkened(0.08), border, 10))
+		button.add_theme_stylebox_override("disabled", _flat(Color("#111a23"), Color("#24313b"), 10))
 		button.add_theme_color_override("font_color", Color("#edf7ff") if afford else Color("#697887"))
+		button.add_theme_font_size_override("font_size", 14)
 	log_label.text = "\n".join(log_lines)
 	if feedback_label != null:
 		feedback_label.text = feedback

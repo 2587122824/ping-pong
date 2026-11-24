@@ -1642,6 +1642,8 @@ func _open_formation_battle() -> void:
 		economy_hud.visible = false
 	if interaction_hint != null:
 		interaction_hint.visible = false
+	# 隐藏探索世界的全部 3D 节点（地面/NPC/传送门/灯光环境），避免与布阵棋盘重叠
+	_set_world_visible(false)
 	formation_battle = scene.instantiate()
 	add_child(formation_battle)
 
@@ -1649,6 +1651,7 @@ func _close_formation_battle() -> void:
 	if formation_battle != null and is_instance_valid(formation_battle):
 		formation_battle.queue_free()
 	formation_battle = null
+	_set_world_visible(true)
 	if camera != null:
 		camera.current = true
 	if player_status_hud != null:
@@ -1657,6 +1660,12 @@ func _close_formation_battle() -> void:
 		economy_hud.visible = true
 	if interaction_hint != null:
 		interaction_hint.visible = true
+
+# 布阵场景自带独立相机/环境/棋盘；开关时统一显隐探索世界的 3D 子节点
+func _set_world_visible(visible: bool) -> void:
+	for child in get_children():
+		if child is Node3D and child != formation_battle:
+			child.visible = visible
 
 func _is_modal_open() -> bool:
 	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (level_select_panel != null and level_select_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible) or (talent_panel != null and talent_panel.visible) or (formation_battle != null and formation_battle.visible)

@@ -16,12 +16,18 @@ func _run() -> void:
 	assert(not game.player_status_hud.visible, "left status HUD hidden in formation")
 	assert(not game.economy_hud.visible, "right menu HUD hidden in formation")
 	assert(not game.interaction_hint.visible, "interaction hint hidden in formation")
+	for child in game.get_children():
+		if child is Node3D and child != game.formation_battle:
+			assert(not child.visible, "world 3D node hidden in formation: " + child.name)
 
 	game._close_formation_battle()
 	assert(game.formation_battle == null, "formation freed on close")
 	assert(game.player_status_hud.visible, "left status HUD restored")
 	assert(game.economy_hud.visible, "right menu HUD restored")
 	assert(game.interaction_hint.visible, "interaction hint restored")
+	for child in game.get_children():
+		if child is Node3D:
+			assert(child.visible, "world 3D node restored: " + child.name)
 
 	print("hud toggle ok")
 	quit()
