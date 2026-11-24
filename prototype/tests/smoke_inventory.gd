@@ -15,11 +15,11 @@ func _run() -> void:
 
 	game.battle_player_hp = 20
 	game._use_item("energy_drink")
-	assert(game.battle_player_hp == 26, "Energy drink should restore six health")
+	assert(game.battle_player_hp == 38, "Energy drink should restore eighteen health")
 	assert(game.inventory["energy_drink"] == 0, "Using a healing item should consume one")
 	assert(game.inventory_slots[0].text == "空格", "An emptied stack should return its slot to empty")
 
-	game.battle_player_hp = 25
+	game.battle_player_hp = 75
 	game._use_item("med_patch")
 	assert(game.battle_player_hp == game.PLAYER_MAX_HP, "Healing should not exceed maximum health")
 	assert(game.inventory["med_patch"] == 0, "A partially effective heal should still consume one item")
@@ -33,7 +33,7 @@ func _run() -> void:
 	game._refresh_inventory_grid()
 	game.battle_player_hp = 10
 	game._use_item("trauma_kit")
-	assert(game.battle_player_hp == 28, "Trauma kit should restore eighteen health")
+	assert(game.battle_player_hp == 64, "Trauma kit should restore fifty-four health")
 	assert(game.inventory["trauma_kit"] == 0, "Using the trauma kit should consume it")
 
 	game.inventory["data_chip"] = 1

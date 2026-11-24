@@ -2,7 +2,7 @@ extends Node3D
 
 const PLAYER_SPEED := 5.0
 const INTERACTION_DISTANCE := 3.2
-const PLAYER_MAX_HP := 30
+const PLAYER_MAX_HP := 100
 const PLAYER_MAX_STAMINA := 100
 const BATTLE_STAMINA_PER_TURN := 20
 const XP_PER_LEVEL := 100
@@ -105,6 +105,8 @@ var battle_hand: Array[Dictionary] = []
 var battle_deck: Array[String] = []
 var battle_discard: Array[String] = []
 var battle_next_action_damage_bonus := 0
+var battle_counter_damage := 0
+var battle_enemy_slow := 0
 var battle_feedback_text := ""
 var current_level_id := "CH1-01"
 var current_level: Dictionary = {}
@@ -112,76 +114,78 @@ var battle_intent_index := 0
 var level_rewards_claimed: Dictionary = {}
 var active_deck_id := "table_tennis"
 var battle_decks := {
-	"table_tennis": {"name": "乒乓球 · 近台快攻", "cards": ["tt_main", "tt_sub", "tt_control", "tt_defense", "tt_resource", "tt_tactic"]},
-	"badminton": {"name": "羽毛球 · 杀上网", "cards": ["bad_main", "bad_sub", "bad_control", "bad_defense", "bad_resource", "bad_tactic"]},
-	"tennis": {"name": "网球 · 底线相持", "cards": ["ten_main", "ten_sub", "ten_control", "ten_defense", "ten_resource", "ten_tactic"]}
+	"table_tennis": {"name": "乒乓球 · 近台快攻", "cards": [
+		"tt_main", "tt_sub", "tt_control", "tt_defense", "tt_resource", "tt_tactic",
+		"tt_smash", "tt_rip", "tt_backhand_counter", "tt_loop", "tt_spin", "tt_chop", "tt_serve"
+	]}
 }
-var player_deck: Array[String] = ["tt_main", "tt_sub", "tt_control", "tt_defense", "tt_resource", "tt_tactic"]
+var player_deck: Array[String] = [
+	"tt_main", "tt_sub", "tt_control", "tt_defense", "tt_resource", "tt_tactic",
+	"tt_smash", "tt_rip", "tt_backhand_counter", "tt_loop", "tt_spin", "tt_chop", "tt_serve"
+]
 
 var level_definitions := {
 	"CH0-01": {
-		"name": "发球机·初号", "type": "教学", "max_hp": 36, "reward_xp": 10,
+		"name": "发球机·初号", "type": "教学", "max_hp": 80, "reward_xp": 10,
 		"intents": [
-			{"name": "送球", "damage": 6}, {"name": "送球", "damage": 6}, {"name": "送球", "damage": 6}
+			{"name": "送球", "damage": 10}, {"name": "送球", "damage": 10}, {"name": "送球", "damage": 10}
 		],
-		"pre_battle": "训练协议：先观察意图，再安排出牌。", "defeat_hint": "教学关会重新开始。"
-	},
-	"CH0-B01": {
-		"name": "裁判机器人", "type": "BOSS", "max_hp": 75, "reward_xp": 100,
-		"intents": [
-			{"name": "判定·警告", "damage": 10},
-			{"name": "蓄力", "damage": 0, "charge": true, "next_damage": 18},
-			{"name": "判定·罚分", "damage": 18}
-		],
-		"pre_battle": "它会先蓄力再重击。蓄力回合是抢输出还是先垫格挡？", "defeat_hint": "重击 18 点，一张格挡挡不住；试试牵制或在蓄力回合输出。"
+		"pre_battle": "训练协议：先看下一拍，再决定出什么。", "defeat_hint": "教学关可以反复打，先把 10 费的「正手快带」用熟。"
 	},
 	"CH1-01": {
-		"name": "陪练机器人", "type": "主线", "max_hp": 55, "reward_xp": 25,
+		"name": "陪练机器人", "type": "主线", "max_hp": 140, "reward_xp": 25,
 		"intents": [
-			{"name": "快带", "damage": 10}, {"name": "挡球", "damage": 8}, {"name": "挡球", "damage": 8}
+			{"name": "快带", "damage": 16}, {"name": "挡球", "damage": 14}, {"name": "挡球", "damage": 14}
 		],
-		"pre_battle": "节奏不快，但每一拍都在试你的体力分配。", "defeat_hint": "先看下一拍再决定出什么，格挡只在本回合有效。"
+		"pre_battle": "节奏不快，但每一拍都在试你的体力分配。", "defeat_hint": "每回合只有 20 体力，别把预算全压在贵牌上。"
 	},
 	"CH1-E01": {
-		"name": "破防型选手", "type": "精英", "max_hp": 70, "reward_xp": 60,
+		"name": "破防型选手", "type": "精英", "max_hp": 170, "reward_xp": 60,
 		"intents": [
-			{"name": "试探", "damage": 8}, {"name": "破防", "damage": 14, "armor_break": true}, {"name": "追身", "damage": 8}
+			{"name": "试探", "damage": 14}, {"name": "破防", "damage": 26, "armor_break": true}, {"name": "追身", "damage": 14}
 		],
-		"pre_battle": "它有一拍能穿透防守。建议满血再来。", "defeat_hint": "破防那一下格挡没用，用牵制把它减半，或者换输出。"
+		"pre_battle": "他有一拍能穿透格挡。建议满血再来。", "defeat_hint": "破防那一下格挡没用，改用「劈长」减半，或者干脆抢输出。"
 	},
-	"CH1-S01": {
-		"name": "节奏控制器", "type": "支线", "max_hp": 65, "reward_xp": 40, "repeat_xp": 10, "first_items": {"med_patch": 2},
+	"CH0-B01": {
+		"name": "小孩哥", "type": "BOSS", "max_hp": 150, "reward_xp": 100,
 		"intents": [
-			{"name": "重切", "damage": 12}, {"name": "搓短", "damage": 6},
-			{"name": "拖慢", "damage": 6, "suppress_recovery": 10}
+			{"name": "快攻抢点", "damage": 16},
+			{"name": "假动作", "damage": 0, "charge": true, "next_damage": 30},
+			{"name": "正手扑杀", "damage": 30}
 		],
-		"pre_battle": "它会拖慢你的恢复节奏，别指望攒够一回合的体力。", "defeat_hint": "恢复被压低的回合，只出得起一张副攻或一张格挡。"
+		"pre_battle": "小孩哥只会三拍：抢点、假动作、扑杀。假动作那拍不出伤害，但下一拍就是 30。",
+		"defeat_hint": "他假动作时别急着铺格挡——那回合是你攒体力、上「霸王拧」的唯一窗口。"
+	},
+	"CH0-B02": {
+		"name": "小区大爷", "type": "BOSS", "max_hp": 200, "reward_xp": 150,
+		"intents": [
+			{"name": "搓短", "damage": 12, "suppress_recovery": 10},
+			{"name": "长胶怪拍", "damage": 22, "armor_break": true},
+			{"name": "磨体力", "damage": 10, "suppress_recovery": 5}
+		],
+		"pre_battle": "大爷不跟你拼速度：他每拍都在掐你的体力恢复。长胶那一下无视格挡。",
+		"defeat_hint": "恢复被压到 10 的回合，只能出一张便宜牌或一张反拉；别指望攒出 50 费的扣杀。"
 	}
 }
 
 var battle_card_definitions := {
-	"tt_main": {"name": "正手冲球", "type": "action", "effect": "damage", "cost": 15, "value": 4, "description": "武器基础伤害 +4 招式伤害"},
-	"tt_sub": {"name": "反手拧拉", "type": "action", "effect": "damage", "cost": 10, "value": 2, "description": "武器基础伤害 +2 招式伤害"},
-	"tt_control": {"name": "侧身暴冲", "type": "action", "effect": "disrupt", "cost": 15, "value": 1, "description": "武器基础伤害 +1，并使敌方本回合攻击减半"},
-	"tt_defense": {"name": "削球", "type": "defense", "effect": "block", "cost": 10, "value": 7, "description": "获得 7 点格挡"},
-	"tt_resource": {"name": "摆短", "type": "resource", "effect": "draw", "cost": 5, "value": 1, "description": "抽 1 张牌"},
-	"tt_tactic": {"name": "霸王拧", "type": "tactic", "effect": "next_action_bonus", "cost": 5, "value": 3, "description": "下一张行动牌伤害 +3"},
-	"bad_main": {"name": "重杀", "type": "action", "effect": "damage", "cost": 15, "value": 4, "description": "武器基础伤害 +4 招式伤害"},
-	"bad_sub": {"name": "劈吊", "type": "action", "effect": "damage", "cost": 10, "value": 2, "description": "武器基础伤害 +2 招式伤害"},
-	"bad_control": {"name": "平抽挡", "type": "action", "effect": "disrupt", "cost": 15, "value": 1, "description": "武器基础伤害 +1，并使敌方本回合攻击减半"},
-	"bad_defense": {"name": "挡网", "type": "defense", "effect": "block", "cost": 10, "value": 7, "description": "获得 7 点格挡"},
-	"bad_resource": {"name": "搓球", "type": "resource", "effect": "draw", "cost": 5, "value": 1, "description": "抽 1 张牌"},
-	"bad_tactic": {"name": "起跳杀", "type": "tactic", "effect": "next_action_bonus", "cost": 5, "value": 3, "description": "下一张行动牌伤害 +3"},
-	"ten_main": {"name": "正手平击", "type": "action", "effect": "damage", "cost": 15, "value": 4, "description": "武器基础伤害 +4 招式伤害"},
-	"ten_sub": {"name": "双手反拍", "type": "action", "effect": "damage", "cost": 10, "value": 2, "description": "武器基础伤害 +2 招式伤害"},
-	"ten_control": {"name": "放短球", "type": "action", "effect": "disrupt", "cost": 15, "value": 1, "description": "武器基础伤害 +1，并使敌方本回合攻击减半"},
-	"ten_defense": {"name": "切削球", "type": "defense", "effect": "block", "cost": 10, "value": 7, "description": "获得 7 点格挡"},
-	"ten_resource": {"name": "挑高球", "type": "resource", "effect": "draw", "cost": 5, "value": 1, "description": "抽 1 张牌"},
-	"ten_tactic": {"name": "高压球", "type": "tactic", "effect": "next_action_bonus", "cost": 5, "value": 3, "description": "下一张行动牌伤害 +3"}
+	"tt_sub": {"name": "正手快带", "type": "action", "effect": "damage", "cost": 10, "value": 7, "description": "15 伤害（8 基础 + 7 招式）。最便宜的一拍，用来把回合预算打满。"},
+	"tt_main": {"name": "正手快攻", "type": "action", "effect": "damage", "cost": 20, "value": 16, "description": "24 伤害（8 基础 + 16 招式）。标准主攻，一回合一张就够。"},
+	"tt_rip": {"name": "反手快攻", "type": "action", "effect": "damage_draw", "cost": 20, "value": 14, "draw": 1, "description": "22 伤害并抽 1 张：反手出球快，打完立刻衔接下一拍。"},
+	"tt_control": {"name": "反手快撕", "type": "action", "effect": "damage_draw", "cost": 30, "value": 22, "draw": 1, "description": "30 伤害并抽 1 张：撕开落点，把对手顶出台面。"},
+	"tt_chop": {"name": "劈长", "type": "action", "effect": "disrupt", "cost": 25, "value": 4, "description": "12 伤害，且使敌方本回合攻击减半（长球压反手，对手来不及发力）。"},
+	"tt_smash": {"name": "正手扣杀", "type": "action", "effect": "damage", "cost": 50, "value": 42, "description": "50 伤害。本套牌唯一的终结技，需要攒两回合体力。"},
+	"tt_loop": {"name": "前冲弧圈球", "type": "action", "effect": "damage", "cost": 40, "value": 26, "description": "34 伤害。中远台的稳定输出，不附带任何防守。"},
+	"tt_spin": {"name": "加转弧圈球", "type": "action", "effect": "slow", "cost": 40, "value": 20, "slow": 6, "description": "28 伤害，并使敌方本回合攻击 -6（强旋转让回球发飘）。"},
+	"tt_tactic": {"name": "霸王拧", "type": "tactic", "effect": "next_action_bonus", "cost": 50, "value": 20, "description": "下一张行动牌伤害 +20。和扣杀/弧圈球叠起来就是一波流。"},
+	"tt_serve": {"name": "转不转发球", "type": "tactic", "effect": "serve", "cost": 20, "value": 6, "description": "下一张行动牌 +6，且敌方本回合攻击减半（对手判断不出转不转）。"},
+	"tt_defense": {"name": "正手反拉", "type": "defense", "effect": "counter", "cost": 40, "value": 14, "counter": 18, "description": "获得 14 格挡；若本回合完全挡下攻击，反击 18 伤害。"},
+	"tt_backhand_counter": {"name": "反手反拉", "type": "defense", "effect": "counter", "cost": 40, "value": 10, "counter": 24, "description": "获得 10 格挡；若完全挡下攻击，反击 24 伤害。格挡更低、反击更狠。"},
+	"tt_resource": {"name": "摆短", "type": "resource", "effect": "draw", "cost": 25, "value": 2, "description": "抽 2 张牌。用最省的体力把手牌重新铺开。"}
 }
 var equipment_slots := {"weapon": "starter_racket", "clothes": "", "shoes": "", "hat": ""}
 var equipment_definitions := {
-	"starter_racket": {"name": "训练球拍", "slot": "weapon", "base_damage": 4, "description": "主角的基础武器，提供 4 点基础伤害。"}
+	"starter_racket": {"name": "木棍", "slot": "weapon", "base_damage": 8, "description": "还没变成球拍的一块硬木棍，提供 8 点基础伤害。"}
 }
 var talent_order: Array[String] = ["racket_calibration", "read_intent", "field_routine", "tactical_memory"]
 var talent_definitions := {
@@ -200,9 +204,9 @@ var inventory := {
 }
 
 var shop_items := [
-	{"id": "energy_drink", "name": "能量饮料", "buy": 20, "sell": 10, "description": "恢复 6 点生命值的便携饮品", "effect": "heal", "value": 6, "color": Color("#fb7185")},
-	{"id": "med_patch", "name": "急救贴", "buy": 32, "sell": 16, "description": "恢复 10 点生命值", "effect": "heal", "value": 10, "color": Color("#f97316")},
-	{"id": "trauma_kit", "name": "创伤包", "buy": 58, "sell": 29, "description": "恢复 18 点生命值", "effect": "heal", "value": 18, "color": Color("#ef4444")},
+	{"id": "energy_drink", "name": "能量饮料", "buy": 20, "sell": 10, "description": "恢复 18 点生命值的便携饮品", "effect": "heal", "value": 18, "color": Color("#fb7185")},
+	{"id": "med_patch", "name": "急救贴", "buy": 32, "sell": 16, "description": "恢复 30 点生命值", "effect": "heal", "value": 30, "color": Color("#f97316")},
+	{"id": "trauma_kit", "name": "创伤包", "buy": 58, "sell": 29, "description": "恢复 54 点生命值", "effect": "heal", "value": 54, "color": Color("#ef4444")},
 	{"id": "data_chip", "name": "数据芯片", "buy": 35, "sell": 18, "description": "存有城市接口资料", "effect": "none", "value": 0, "color": Color("#60a5fa")},
 	{"id": "repair_kit", "name": "维修工具包", "buy": 28, "sell": 14, "description": "常见设备维修材料", "effect": "none", "value": 0, "color": Color("#fbbf24")}
 ]
@@ -857,8 +861,8 @@ func _setup_deck_and_codex_ui(layer: CanvasLayer) -> void:
 	deck_view_summary.add_theme_font_size_override("font_size", 17)
 	deck_view_summary.add_theme_color_override("font_color", Color("#c5d4e5"))
 	deck_view_panel.add_child(deck_view_summary)
-	var theme_options := ["table_tennis", "badminton", "tennis"]
-	var theme_labels := ["乒乓球", "羽毛球", "网球"]
+	var theme_options := ["table_tennis"]
+	var theme_labels := ["乒乓球 · 近台快攻"]
 	for index in range(theme_options.size()):
 		var deck_id: String = theme_options[index]
 		var theme_button := Button.new()
@@ -1810,6 +1814,8 @@ func _start_level(level_id: String) -> void:
 	battle_deck = player_deck.duplicate()
 	battle_discard.clear()
 	battle_next_action_damage_bonus = 0
+	battle_counter_damage = 0
+	battle_enemy_slow = 0
 	battle_hand.clear()
 	_draw_battle_cards_to_five()
 	battle_panel.visible = true
@@ -1871,15 +1877,35 @@ func _play_battle_card(index: int) -> void:
 				battle_opponent_hp = max(0, battle_opponent_hp - action_value)
 				battle_weakens_opponent = true
 				battle_feedback_text = "你使用「%s」，造成 %d 点伤害并削弱本回合攻击。" % [card["name"], action_value]
+			elif effect == "damage_draw":
+				battle_opponent_hp = max(0, battle_opponent_hp - action_value)
+				var rip_draw := _draw_battle_cards(int(card.get("draw", 1)))
+				battle_feedback_text = "你使用「%s」，造成 %d 点伤害并抽 %d 张。" % [card["name"], action_value, rip_draw]
+			elif effect == "slow":
+				battle_opponent_hp = max(0, battle_opponent_hp - action_value)
+				battle_enemy_slow += int(card.get("slow", 0))
+				battle_feedback_text = "你使用「%s」，造成 %d 点伤害，敌方本回合攻击 -%d。" % [
+					card["name"], action_value, int(card.get("slow", 0))
+				]
 			else:
 				battle_feedback_text = "你使用「%s」。" % card["name"]
 		"defense":
 			battle_block += card["value"]
-			battle_feedback_text = "你使用「%s」，获得 %d 点格挡。" % [card["name"], card["value"]]
+			if effect == "counter":
+				battle_counter_damage += int(card.get("counter", 0))
+				battle_feedback_text = "你使用「%s」，获得 %d 点格挡；完全挡下则反击 %d。" % [
+					card["name"], card["value"], int(card.get("counter", 0))
+				]
+			else:
+				battle_feedback_text = "你使用「%s」，获得 %d 点格挡。" % [card["name"], card["value"]]
 		"tactic":
 			var tactic_bonus: int = int(card["value"]) + _get_talent_bonus("tactic_bonus")
 			battle_next_action_damage_bonus += tactic_bonus
-			battle_feedback_text = "你使用「%s」，下一张行动牌伤害 +%d。" % [card["name"], tactic_bonus]
+			if effect == "serve":
+				battle_weakens_opponent = true
+				battle_feedback_text = "你使用「%s」，下一张行动牌 +%d，且敌方本回合攻击减半。" % [card["name"], tactic_bonus]
+			else:
+				battle_feedback_text = "你使用「%s」，下一张行动牌伤害 +%d。" % [card["name"], tactic_bonus]
 		"resource":
 			var actual_draw_count := _draw_battle_cards(card["value"])
 			battle_feedback_text = "你使用「%s」，抽取 %d 张牌。" % [card["name"], actual_draw_count]
@@ -1903,6 +1929,8 @@ func _end_battle_turn() -> void:
 	var incoming_damage := int(current_intent.get("damage", 8))
 	if battle_weakens_opponent:
 		incoming_damage = ceili(float(incoming_damage) / 2.0)
+	if battle_enemy_slow > 0:
+		incoming_damage = max(0, incoming_damage - battle_enemy_slow)
 	var armor_break := bool(current_intent.get("armor_break", false))
 	var blocked_damage: int = 0 if armor_break else min(battle_block, incoming_damage)
 	var actual_damage: int = incoming_damage - blocked_damage
@@ -1911,6 +1939,10 @@ func _end_battle_turn() -> void:
 	battle_player_hp = max(0, battle_player_hp - actual_damage)
 	if actual_damage == 0:
 		battle_feedback_text = "%s 发动 %d 点攻击，但被你的格挡完全挡下。" % [current_intent.get("name", "敌方"), incoming_damage]
+		if incoming_damage > 0 and battle_counter_damage > 0:
+			var counter_hit: int = battle_counter_damage
+			battle_opponent_hp = max(0, battle_opponent_hp - counter_hit)
+			battle_feedback_text = "%s 的反拉：完全挡下攻击，反击 %d 伤害。" % [current_intent.get("name", "敌方"), counter_hit]
 	elif armor_break:
 		battle_feedback_text = "%s 穿透格挡，造成 %d 点伤害。" % [current_intent.get("name", "破防攻击"), actual_damage]
 	else:
@@ -1919,6 +1951,11 @@ func _end_battle_turn() -> void:
 		battle_finished = true
 		battle_won = false
 		battle_feedback_text = "你输掉了牌战。%s" % current_level.get("defeat_hint", "调整出牌节奏后再来挑战。")
+	elif battle_opponent_hp <= 0:
+		battle_finished = true
+		battle_won = true
+		battle_feedback_text = "反拉得手，对手被反击打垮。"
+		_grant_battle_victory_xp()
 	else:
 		battle_turn += 1
 		var recovery := int(current_level.get("recovery", BATTLE_STAMINA_PER_TURN))
@@ -1928,6 +1965,8 @@ func _end_battle_turn() -> void:
 		battle_block = 0
 		battle_weakens_opponent = false
 		battle_next_action_damage_bonus = 0
+		battle_counter_damage = 0
+		battle_enemy_slow = 0
 		battle_intent_index = (battle_intent_index + 1) % current_level["intents"].size()
 		for played_card in battle_hand:
 			battle_discard.append(String(played_card["id"]))
@@ -1945,6 +1984,8 @@ func _close_battle() -> void:
 	battle_deck.clear()
 	battle_discard.clear()
 	battle_next_action_damage_bonus = 0
+	battle_counter_damage = 0
+	battle_enemy_slow = 0
 
 func _get_current_intent() -> Dictionary:
 	if current_level.is_empty() or not current_level.has("intents"):

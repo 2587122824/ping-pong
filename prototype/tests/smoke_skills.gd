@@ -44,16 +44,16 @@ func _run() -> void:
 	game.battle_hand.append({"id": "tt_tactic"})
 	game.battle_hand.append({"id": "tt_main"})
 	game._play_battle_card(0)
-	assert(game.battle_next_action_damage_bonus == 4, "Tactical Memory should add one damage to Tactical Boost")
+	assert(game.battle_next_action_damage_bonus == 21, "Tactical Memory should add one damage to Tactical Boost")
 	assert(game.battle_feedback_text.contains("+4"), "Tactical Boost feedback should show the full skill-enhanced value")
 	game._play_battle_card(0)
-	assert(game.battle_opponent_hp == 23, "Racket Calibration and Tactical Memory should reduce the configured training opponent from 36 by thirteen damage")
+	assert(game.battle_opponent_hp == 34, "Racket Calibration and Tactical Memory should reduce the eighty health tutorial opponent by forty-six damage")
 
 	game._close_battle()
 	game.battle_player_hp = 20
 	game.inventory["energy_drink"] = 1
 	game._use_item("energy_drink")
-	assert(game.battle_player_hp == 28, "Field Routine should add two healing to the six-point energy drink")
+	assert(game.battle_player_hp == 40, "Field Routine should add two healing to the eighteen-point energy drink")
 	assert(game.inventory["energy_drink"] == 0, "Using a healing item should consume it")
 
 	print("Talent smoke test passed")
