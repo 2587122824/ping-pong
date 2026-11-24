@@ -1070,9 +1070,10 @@ func _on_mouse_up(event: InputEventMouseButton) -> void:
 
 func _pick_slot(screen_pos: Vector2) -> Dictionary:
 	var local := _to_viewport_local(screen_pos)
-	var ray = battle_camera.get_screen_ray(local)
-	var space := board_viewport.world_3d.direct_space_state
-	var query := PhysicsRayQueryParameters3D.create(ray.origin, ray.origin + ray.direction * 30.0)
+	var ray_origin: Vector3 = battle_camera.project_ray_origin(local)
+	var ray_dir: Vector3 = battle_camera.project_ray_normal(local)
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + ray_dir * 30.0)
 	query.collide_with_areas = true
 	var hit := space.intersect_ray(query)
 	if hit.is_empty():
