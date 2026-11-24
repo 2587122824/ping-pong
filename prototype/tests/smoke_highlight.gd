@@ -19,22 +19,24 @@ func _run() -> void:
 	var fits_far: bool = battle.card_fits(card_id, 6)
 	print("card=%s fits_near=%s fits_far=%s" % [card_id, fits_near, fits_far])
 
-	# 高亮后：符合区域的空槽不应被压暗，不符合的槽 modulate 变暗
-	var near_btn: Button = battle.slot_buttons["player"][0][battle.ROWS - 1 - 0]
-	var far_btn: Button = battle.slot_buttons["player"][0][battle.ROWS - 1 - 6]
+	# 高亮后：符合区域的空槽不应被压暗，不符合的槽压暗
+	var near_panel: MeshInstance3D = battle.panels["player"][0][0]
+	var far_panel: MeshInstance3D = battle.panels["player"][0][6]
+	var near_lum: float = near_panel.material_override.albedo_color.get_luminance()
+	var far_lum: float = far_panel.material_override.albedo_color.get_luminance()
 	if fits_near:
-		assert(near_btn.modulate.get_luminance() > 0.8, "valid slot not dimmed")
+		assert(near_lum > 0.12, "valid slot not dimmed: %.3f" % near_lum)
 	if not fits_far:
-		assert(far_btn.modulate.get_luminance() < 0.8, "invalid slot dimmed")
+		assert(far_lum < 0.12, "invalid slot dimmed: %.3f" % far_lum)
 
 	# 再点一次取消选中
 	battle._on_hand_pressed(0)
 	assert(battle.selected_card == -1, "second click deselects")
 
 	# 引爆触发炸弹爆炸特效，位置归零
-	battle.bombs[0]["pos"] = 2.0
-	battle._detonate(0, "timer")
-	assert(float(battle.bombs[0]["pos"]) == 0.0, "bomb resets after detonation")
-	assert(battle.bomb_views[0].explosion > 0.0, "explosion effect triggered")
+	battle.bomb_pos = 2.0
+	battle._detonate("timer")
+	assert(absf(battle.bomb_pos) < 0.01, "bomb resets after detonation")
+	assert(battle.boom_time > 0.0, "explosion effect triggered")
 	print("highlight logic ok")
 	quit()

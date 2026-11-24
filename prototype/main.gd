@@ -1649,6 +1649,8 @@ func _close_formation_battle() -> void:
 	if formation_battle != null and is_instance_valid(formation_battle):
 		formation_battle.queue_free()
 	formation_battle = null
+	if camera != null:
+		camera.current = true
 	if player_status_hud != null:
 		player_status_hud.visible = true
 	if economy_hud != null:

@@ -1,10 +1,10 @@
-extends Node2D
+extends Node3D
 
-# 实时布阵自动战斗 V0.3（候选原型）
+# 实时布阵自动战斗 V0.3（3D 桌面战场原型）
 # 依据 docs/FORMATION_BATTLE_V0_3.md：
 # - 3 路 × 7 排站桩阵型，near/mid/far 三个战术区域
 # - 单位没有生命值，靠出手次数 / 持续时间 / 被克制退场
-# - 每路一颗中线炸弹，招式推动它左右移动，定时或推到底线引爆
+# - 全场共用一颗主炸弹：招式推动它压向我方/敌方半场，定时或推到底线引爆
 # - 双方主体生命：玩家 100，BOSS 独立血量
 # - 单一乒乓球招式牌组 13 张，费用 10-35，武器「木棍」给快攻 +1 次出手
 
@@ -126,6 +126,8 @@ const LEVELS := {
 	}
 }
 
+# ---------------------------------------------------------------- 战场状态
+
 var level_id := "CH0-B01"
 var phase := "deploy"
 var damage_in := 0
@@ -143,7 +145,12 @@ var battle_time := 0.0
 var end_reason := ""
 
 var board := {}
-var bombs: Array = []
+# 全场共用一颗主炸弹：pos 负=我方半场，正=敌方半场；timer 定时；lane 为视觉所在路
+var bomb_pos := 0.0
+var bomb_timer := BOMB_TIMER
+var bomb_lane := 1
+var boom_time := 0.0
+
 var hand: Array = []
 var draw_pile: Array = []
 var discard: Array = []
@@ -158,7 +165,6 @@ var enemy_timer := 0.0
 var enemy_deploy_timer := ENEMY_DEPLOY_INTERVAL
 var stamina_timer := 0.0
 
-# UI
 const TYPE_COLORS := {
 	"fast": Color("#fb923c"),
 	"spin": Color("#f472b6"),
@@ -166,6 +172,23 @@ const TYPE_COLORS := {
 	"counter": Color("#60a5fa")
 }
 
+# 3D 场景节点
+const LANE_Z := [-2.3, 0.0, 2.3]
+const SLOT_X0 := 1.15
+const SLOT_X_STEP := 1.0
+
+var battle_camera: Camera3D
+var table_mesh: MeshInstance3D
+var panels := {"player": [], "enemy": []}
+var panel_mats := {"player": [], "enemy": []}
+var panel_metas := {"player": [], "enemy": []}
+var tokens := {"player": [], "enemy": []}
+var bomb_node: MeshInstance3D
+var bomb_material: StandardMaterial3D
+var boom_node: MeshInstance3D
+var boom_material: StandardMaterial3D
+
+# 2D 覆盖层节点
 var root: Control
 var player_hp_label: Label
 var enemy_hp_label: Label
@@ -179,8 +202,6 @@ var feedback_label: Label
 var level_label: Label
 var hand_bar: HBoxContainer
 var hand_buttons: Array = []
-var slot_buttons := {"player": [], "enemy": []}
-var bomb_views: Array = []
 var level_buttons := {}
 var start_button: Button
 var auto_button: Button
@@ -188,6 +209,7 @@ var auto_button: Button
 
 func _ready() -> void:
 	if ui_enabled:
+		_build_world()
 		_build_ui()
 	restart()
 
@@ -222,9 +244,10 @@ func restart() -> void:
 				rows.append(null)
 			lanes.append(rows)
 		board[side] = lanes
-	bombs = []
-	for lane in range(LANES):
-		bombs.append({"pos": 0.0, "timer": BOMB_TIMER})
+	bomb_pos = 0.0
+	bomb_timer = BOMB_TIMER
+	bomb_lane = 1
+	boom_time = 0.0
 	hand = []
 	draw_pile = []
 	discard = []
@@ -239,8 +262,8 @@ func restart() -> void:
 		_spawn(String(entry[0]), "enemy", int(entry[1]), int(entry[2]), false)
 	_log("布阵阶段：%s" % String(LEVELS[level_id]["name"]))
 	_log("敌方：%s" % String(LEVELS[level_id]["special"]))
-	_log("炸弹每 %.0f 秒引爆一次，推到底线立即引爆。" % BOMB_TIMER)
-	set_feedback("点手牌 → 点阵位部署", true)
+	_log("全场一颗主炸弹，每 %.0f 秒引爆一次，推到底线立即引爆。" % BOMB_TIMER)
+	set_feedback("点手牌 → 点桌面上的我方格子部署", true)
 	_refresh()
 
 
@@ -456,10 +479,6 @@ func _deploy_score(card_id: String, enemy_types: Array) -> float:
 		var reflect: Array = CARDS[card_id].get("reflect", [])
 		if reflect.has(foe_type):
 			score += 2.5
-		# 控台压制：debuff 正好对应敌方类型
-		var debuff: Dictionary = CARDS[card_id].get("debuff", {})
-		if not debuff.is_empty() and String(debuff.get("type", "")) == foe_type:
-			score += 2.0
 	if enemy_types.is_empty():
 		score += 0.5
 	return score
@@ -472,9 +491,8 @@ func start_battle() -> void:
 		return
 	phase = "battle"
 	battle_time = 0.0
-	for bomb in bombs:
-		bomb["timer"] = BOMB_TIMER
-	_log("开战：双方招式推动中线炸弹")
+	bomb_timer = BOMB_TIMER
+	_log("开战：双方招式推动全场主炸弹")
 	_refresh()
 
 
@@ -492,6 +510,7 @@ func tick(delta: float) -> void:
 func _process(delta: float) -> void:
 	if auto_tick:
 		tick(delta)
+	_tick_boom(delta)
 
 
 func _step(delta: float) -> void:
@@ -503,12 +522,10 @@ func _step(delta: float) -> void:
 		enemy_stamina = mini(STAMINA_MAX, enemy_stamina + ENEMY_REGEN_AMOUNT)
 
 	# 炸弹计时
-	for lane in range(LANES):
-		var bomb: Dictionary = bombs[lane]
-		bomb["timer"] = float(bomb["timer"]) - delta
-		if float(bomb["timer"]) <= 0.0:
-			_detonate(lane, "timer")
-			bomb["timer"] = BOMB_TIMER
+	bomb_timer = bomb_timer - delta
+	if bomb_timer <= 0.0:
+		_detonate("timer")
+		bomb_timer = BOMB_TIMER
 
 	# 双方单位出手
 	for side in ["player", "enemy"]:
@@ -602,9 +619,9 @@ func _push(side: String, lane: int, amount: float, unit = null) -> void:
 	if lane < 0 or lane >= LANES or amount == 0.0:
 		return
 	var sign_dir := 1.0 if side == "player" else -1.0
-	var bomb: Dictionary = bombs[lane]
-	bomb["pos"] = float(bomb["pos"]) + amount * sign_dir
-	_check_bomb(lane)
+	bomb_lane = lane
+	bomb_pos = bomb_pos + amount * sign_dir
+	_check_bomb()
 
 
 func _press(unit, target) -> void:
@@ -638,13 +655,12 @@ func _press(unit, target) -> void:
 	_push(unit.side, lane, push)
 	# 扣杀：炸弹已在敌方半场时直接推到底线引爆
 	if bool(CARDS[unit.card].get("smash_detonate", false)):
-		var bomb: Dictionary = bombs[lane]
-		if unit.side == "player" and float(bomb["pos"]) > 0.5:
-			bomb["pos"] = BOMB_RANGE
-			_check_bomb(lane)
-		elif unit.side == "enemy" and float(bomb["pos"]) < -0.5:
-			bomb["pos"] = -BOMB_RANGE
-			_check_bomb(lane)
+		if unit.side == "player" and bomb_pos > 0.5:
+			bomb_pos = BOMB_RANGE
+			_check_bomb()
+		elif unit.side == "enemy" and bomb_pos < -0.5:
+			bomb_pos = -BOMB_RANGE
+			_check_bomb()
 	# 转不转发球：敌方本路第一次进攻被吃转
 	if bool(CARDS[unit.card].get("reverse_first", false)) and not unit.has("reversed"):
 		unit["reversed"] = true
@@ -716,32 +732,48 @@ func _exit(unit, reason: String) -> void:
 	_log("%s %s 收拍（%s）" % ["我方" if unit.side == "player" else "敌方", unit.name, reason])
 
 
-func _check_bomb(lane: int) -> void:
-	var bomb: Dictionary = bombs[lane]
-	var pos := float(bomb["pos"])
-	if pos >= BOMB_RANGE:
-		_detonate(lane, "baseline_enemy")
-	elif pos <= -BOMB_RANGE:
-		_detonate(lane, "baseline_player")
+func _check_bomb() -> void:
+	if bomb_pos >= BOMB_RANGE:
+		_detonate("baseline_enemy")
+	elif bomb_pos <= -BOMB_RANGE:
+		_detonate("baseline_player")
 
 
-func _detonate(lane: int, reason: String) -> void:
-	var bomb: Dictionary = bombs[lane]
-	var pos := float(bomb["pos"])
+func _detonate(reason: String) -> void:
 	if reason == "timer":
-		if pos > 0.3:
+		if bomb_pos > 0.3:
 			_damage_side("enemy", BOMB_DAMAGE, "炸弹定时引爆")
-		elif pos < -0.3:
+		elif bomb_pos < -0.3:
 			_damage_side("player", BOMB_DAMAGE, "炸弹定时引爆")
 		else:
-			_log("炸弹在第 %d 路中线震荡，无人受伤" % (lane + 1))
+			_log("炸弹在中线震荡，无人受伤")
 	elif reason == "baseline_enemy":
 		_damage_side("enemy", BASELINE_DAMAGE, "炸弹被推到底线")
 	elif reason == "baseline_player":
 		_damage_side("player", BASELINE_DAMAGE, "炸弹被推到底线")
-	if bomb_views.size() > lane:
-		bomb_views[lane].play_explosion()
-	bomb["pos"] = 0.0
+	play_explosion()
+	bomb_pos = 0.0
+
+
+func play_explosion() -> void:
+	boom_time = 0.6
+	if boom_node != null:
+		boom_node.visible = true
+		boom_node.position = bomb_node.position if bomb_node != null else Vector3.ZERO
+
+
+func _tick_boom(delta: float) -> void:
+	if boom_time <= 0.0:
+		return
+	boom_time = maxf(0.0, boom_time - delta)
+	if boom_node == null or boom_material == null:
+		return
+	var t := 1.0 - boom_time / 0.6
+	var scale := 0.6 + t * 2.6
+	boom_node.scale = Vector3(scale, scale, scale)
+	boom_material.albedo_color = Color(1.0, 0.62, 0.18, boom_time / 0.6)
+	if boom_time <= 0.0:
+		boom_node.visible = false
 
 
 func _damage_side(side: String, amount: int, source: String) -> void:
@@ -812,113 +844,262 @@ func _enemy_slot_for(card_id: String):
 	return null
 
 
-# ---------------------------------------------------------------- 界面控件
+# ---------------------------------------------------------------- 3D 场景搭建
 
-# 立体炸弹：沿轨道按位置实际滑动，引爆播放扩散冲击环 + 闪光
-class BombView:
-	extends Control
-
-	const RANGE := 7.0
-	const TRAVEL := 34.0
-	const BOOM_TIME := 0.6
-
-	var pos := 0.0
-	var timer := 0.0
-	var explosion := 0.0
-	var info: Label
-
-	func _init() -> void:
-		custom_minimum_size = Vector2(90, 66)
-		info = Label.new()
-		info.position = Vector2(0, 42)
-		info.size = Vector2(90, 18)
-		info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		info.add_theme_font_size_override("font_size", 11)
-		add_child(info)
-
-	func _rim_color() -> Color:
-		if pos < -0.3:
-			return Color("#fb7185")
-		if pos > 0.3:
-			return Color("#7fe4dd")
-		return Color("#c3d0dc")
-
-	func _bomb_center() -> Vector2:
-		var x := 45.0 + clampf(pos, -RANGE, RANGE) / RANGE * TRAVEL
-		return Vector2(x, 24)
-
-	func play_explosion() -> void:
-		explosion = 1.0
-		queue_redraw()
-
-	func _process(delta: float) -> void:
-		if explosion > 0.0:
-			explosion = maxf(0.0, explosion - delta / BOOM_TIME)
-			queue_redraw()
-
-	func set_state(p: float, t: float) -> void:
-		pos = p
-		timer = t
-		info.text = "%.1f 格 · %.1fs" % [absf(p), t]
-		info.add_theme_color_override("font_color", _rim_color())
-		queue_redraw()
-
-	func _draw() -> void:
-		var center := _bomb_center()
-		var rim := _rim_color()
-		draw_line(Vector2(11, 24), Vector2(79, 24), Color("#1d2f42"), 2)
-		if explosion > 0.0:
-			var t := 1.0 - explosion
-			var er := 12.0 + t * 38.0
-			draw_circle(center, er, Color(1.0, 0.72, 0.25, 0.22 * explosion))
-			draw_arc(center, er, 0, TAU, 28, Color(1.0, 0.5, 0.2, explosion), 3.0)
-			draw_circle(center, 9.0 * explosion, Color(1, 1, 1, 0.8 * explosion))
-		draw_circle(center + Vector2(0, 4), 16, Color(0, 0, 0, 0.35))
-		draw_circle(center, 17, Color("#262c34"))
-		draw_arc(center, 17, 0, TAU, 28, rim, 2.0)
-		draw_circle(center + Vector2(-5, -6), 5.5, Color("#3d4651"))
-		draw_line(center + Vector2(5, -15), center + Vector2(11, -23), Color("#c9a86a"), 2)
-		draw_circle(center + Vector2(12, -24), 2.5, Color("#fbbf24"))
-		if pos <= -1.0:
-			_draw_chevron(center + Vector2(-27, 0), rim, -1)
-		elif pos >= 1.0:
-			_draw_chevron(center + Vector2(27, 0), rim, 1)
-
-	func _draw_chevron(at: Vector2, color: Color, dir: int) -> void:
-		var pts := PackedVector2Array([at + Vector2(4 * dir, -6), at, at + Vector2(4 * dir, 6)])
-		draw_colored_polygon(pts, color)
+func _material(color: Color, emissive := false) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	if emissive:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = 0.5
+	return material
 
 
-# 棋盘台面背景：三条车道横带 + 中线炸弹槽，伪纵深底色
-class BoardBg:
-	extends Control
-
-	func _draw() -> void:
-		draw_rect(Rect2(20, 108, 1240, 232), Color("#0d1826"), true)
-		for i in range(3):
-			var y := 116 + i * 74
-			draw_rect(Rect2(28, y, 1224, 68), Color("#122438") if i % 2 == 0 else Color("#0f1e30"), true)
-		draw_rect(Rect2(596, 116, 88, 204), Color("#182a3f"), true)
-		for i in range(1, 3):
-			var y := 116 + i * 74 - 3
-			draw_line(Vector2(28, y), Vector2(1252, y), Color("#22384e"), 1)
+func _slot_position(side: String, lane: int, row: int) -> Vector3:
+	var sign := -1.0 if side == "player" else 1.0
+	var x := sign * (SLOT_X0 + row * SLOT_X_STEP)
+	return Vector3(x, 0.06, LANE_Z[lane])
 
 
-# ---------------------------------------------------------------- UI
+func _build_world() -> void:
+	# 独立环境光 + 平行光（布阵场景可能脱离主世界单独打开）
+	var env_node := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color("#0b1220")
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("#9db8d6")
+	env.ambient_light_energy = 0.85
+	env_node.environment = env
+	add_child(env_node)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-55, 25, 0)
+	sun.light_color = Color("#b9d7ff")
+	sun.light_energy = 1.1
+	add_child(sun)
+
+	battle_camera = Camera3D.new()
+	battle_camera.fov = 55.0
+	add_child(battle_camera)
+	battle_camera.position = Vector3(0.0, 13.5, 11.5)
+	battle_camera.look_at(Vector3(0.0, 0.0, 0.0))
+	battle_camera.current = true
+
+	# 台面
+	table_mesh = MeshInstance3D.new()
+	var table_box := BoxMesh.new()
+	table_box.size = Vector3(15.5, 0.3, 7.4)
+	table_mesh.mesh = table_box
+	table_mesh.material_override = _material(Color("#0d1826"))
+	table_mesh.position = Vector3(0.0, -0.15, 0.0)
+	add_child(table_mesh)
+
+	# 中线提示条
+	var center_line := MeshInstance3D.new()
+	var center_box := BoxMesh.new()
+	center_box.size = Vector3(0.12, 0.02, 7.0)
+	center_line.mesh = center_box
+	center_line.material_override = _material(Color("#2b4058"), true)
+	center_line.position = Vector3(0.0, 0.01, 0.0)
+	add_child(center_line)
+
+	# 槽位面板 + 点选 Area3D
+	for side in ["player", "enemy"]:
+		panels[side] = []
+		panel_mats[side] = []
+		panel_metas[side] = []
+		tokens[side] = []
+		for lane in range(LANES):
+			var lane_panels: Array = []
+			var lane_mats: Array = []
+			var lane_tokens: Array = []
+			for row in range(ROWS):
+				var panel := MeshInstance3D.new()
+				var box := BoxMesh.new()
+				box.size = Vector3(0.9, 0.1, 2.0)
+				panel.mesh = box
+				var mat := StandardMaterial3D.new()
+				mat.albedo_color = _zone_color(zone_of_row(row))
+				panel.material_override = mat
+				panel.position = _slot_position(side, lane, row)
+				panel.set_meta("side", side)
+				panel.set_meta("lane", lane)
+				panel.set_meta("row", row)
+				add_child(panel)
+
+				var area := Area3D.new()
+				var shape := BoxShape3D.new()
+				shape.size = Vector3(0.9, 0.8, 2.0)
+				var collision := CollisionShape3D.new()
+				collision.shape = shape
+				area.add_child(collision)
+				area.position = panel.position
+				area.set_meta("side", side)
+				area.set_meta("lane", lane)
+				area.set_meta("row", row)
+				add_child(area)
+
+				lane_panels.append(panel)
+				lane_mats.append(mat)
+				lane_tokens.append(null)
+			panels[side].append(lane_panels)
+			panel_mats[side].append(lane_mats)
+			tokens[side].append(lane_tokens)
+
+	# 主炸弹
+	bomb_node = MeshInstance3D.new()
+	var bomb_sphere := SphereMesh.new()
+	bomb_sphere.radius = 0.42
+	bomb_sphere.height = 0.84
+	bomb_node.mesh = bomb_sphere
+	bomb_material = _material(Color("#262c34"))
+	bomb_node.material_override = bomb_material
+	bomb_node.position = Vector3(0.0, 0.42, LANE_Z[1])
+	add_child(bomb_node)
+
+	# 引信火花
+	var fuse := MeshInstance3D.new()
+	var fuse_sphere := SphereMesh.new()
+	fuse_sphere.radius = 0.1
+	fuse_sphere.height = 0.2
+	fuse.mesh = fuse_sphere
+	fuse.material_override = _material(Color("#fbbf24"), true)
+	fuse.position = Vector3(0.0, 0.5, 0.0)
+	bomb_node.add_child(fuse)
+
+	# 爆炸冲击环
+	boom_node = MeshInstance3D.new()
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.9
+	ring.outer_radius = 1.1
+	boom_node.mesh = ring
+	boom_material = StandardMaterial3D.new()
+	boom_material.albedo_color = Color(1.0, 0.62, 0.18, 0.0)
+	boom_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	boom_material.emission_enabled = true
+	boom_material.emission = Color(1.0, 0.5, 0.15)
+	boom_node.material_override = boom_material
+	boom_node.visible = false
+	add_child(boom_node)
+
+
+func _zone_color(zone: String) -> Color:
+	match zone:
+		"near":
+			return Color("#1b3d57")
+		"mid":
+			return Color("#172c40")
+		"far":
+			return Color("#132033")
+	return Color("#172c40")
+
+
+func _input(event: InputEvent) -> void:
+	if battle_camera == null:
+		return
+	if not (event is InputEventMouseButton) or not event.pressed or event.button_index != MOUSE_BUTTON_LEFT:
+		return
+	# 点在 2D 控件（手牌/按钮）上时不走 3D 槽位射线
+	if get_viewport().gui_get_hovered_control() != null:
+		return
+	var ray = battle_camera.get_screen_ray(event.position)
+	var space := get_world_3d().direct_space_state
+	var query := PhysicsRayQueryParameters3D.create(ray.origin, ray.origin + ray.direction * 30.0)
+	query.collide_with_areas = true
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return
+	var collider: Object = hit.collider
+	if collider == null or not collider.has_meta("side"):
+		return
+	_on_slot(String(collider.get_meta("side")), int(collider.get_meta("lane")), int(collider.get_meta("row")))
+
+
+func _token_color(unit) -> Color:
+	return TYPE_COLORS.get(String(unit.type), Color("#e2e8f0"))
+
+
+func _sync_tokens() -> void:
+	if tokens.is_empty():
+		return
+	for side in ["player", "enemy"]:
+		for lane in range(LANES):
+			for row in range(ROWS):
+				var unit = board[side][lane][row]
+				var token = tokens[side][lane][row]
+				if unit == null:
+					if token != null:
+						token.queue_free()
+						tokens[side][lane][row] = null
+					continue
+				if token == null:
+					token = MeshInstance3D.new()
+					var capsule := CapsuleMesh.new()
+					capsule.height = 0.72
+					capsule.radius = 0.26
+					token.mesh = capsule
+					token.material_override = StandardMaterial3D.new()
+					token.position = _slot_position(side, lane, row) + Vector3(0.0, 0.42, 0.0)
+					add_child(token)
+					tokens[side][lane][row] = token
+				var mat: StandardMaterial3D = token.material_override
+				mat.albedo_color = _token_color(unit)
+				# 扣顶小标识：靠近相机一侧压低棋子高度，远台略小，形成纵深
+				var scale := 1.0 - row * 0.03
+				token.scale = Vector3(scale, scale, scale)
+
+
+func _sync_board_visuals() -> void:
+	if panels.is_empty():
+		return
+	_sync_tokens()
+
+	var card_id := ""
+	if selected_card >= 0 and selected_card < hand.size():
+		card_id = String(hand[selected_card])
+
+	for lane in range(LANES):
+		for row in range(ROWS):
+			for side in ["player", "enemy"]:
+				var mat: StandardMaterial3D = panel_mats[side][lane][row]
+				var unit = board[side][lane][row]
+				if side == "player" and card_id != "":
+					if not card_fits(card_id, row):
+						mat.albedo_color = Color("#0e1622")
+					elif unit != null:
+						mat.albedo_color = Color("#6b5318")
+					else:
+						mat.albedo_color = Color("#17594a")
+				elif unit != null:
+					mat.albedo_color = _token_color(unit).darkened(0.55)
+				else:
+					mat.albedo_color = _zone_color(zone_of_row(row))
+
+	# 炸弹位置：沿 X 轴压到对应半场格子，Z 跟随最后一路
+	var bomb_x := bomb_pos / BOMB_RANGE * 7.15
+	if bomb_node != null:
+		bomb_node.position = Vector3(bomb_x, 0.42, LANE_Z[bomb_lane])
+		if bomb_material != null:
+			if bomb_pos < -0.3:
+				bomb_material.albedo_color = Color("#7fb7d9")
+			elif bomb_pos > 0.3:
+				bomb_material.albedo_color = Color("#f08a8a")
+			else:
+				bomb_material.albedo_color = Color("#262c34")
+
+
+# ---------------------------------------------------------------- 2D 覆盖层
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# 覆盖层整体不拦截鼠标，点空白处要穿透到 3D 槽位
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(root)
-	var bg := ColorRect.new()
-	bg.color = Color("#0b1220")
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(bg)
-	var board_bg := BoardBg.new()
-	board_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(board_bg)
 
 	var main := VBoxContainer.new()
 	main.position = Vector2(20, 14)
@@ -974,64 +1155,11 @@ func _build_ui() -> void:
 	stamina_bar.show_percentage = false
 	status.add_child(stamina_bar)
 
-	# 棋盘
-	var board_box := VBoxContainer.new()
-	board_box.add_theme_constant_override("separation", 6)
-	main.add_child(board_box)
-
-	var header := HBoxContainer.new()
-	header.add_theme_constant_override("separation", 4)
-	board_box.add_child(header)
-	var lane_spacer := Label.new()
-	lane_spacer.custom_minimum_size = Vector2(44, 18)
-	header.add_child(lane_spacer)
-	_zone_header(header, "player")
-	var bomb_head := Label.new()
-	bomb_head.text = "炸弹"
-	bomb_head.custom_minimum_size = Vector2(90, 18)
-	bomb_head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	bomb_head.add_theme_font_size_override("font_size", 12)
-	bomb_head.add_theme_color_override("font_color", Color("#8aa4b8"))
-	header.add_child(bomb_head)
-	_zone_header(header, "enemy")
-
-	slot_buttons = {"player": [], "enemy": []}
-	for lane in range(LANES):
-		var lane_row := HBoxContainer.new()
-		lane_row.add_theme_constant_override("separation", 4)
-		board_box.add_child(lane_row)
-		var lane_label := Label.new()
-		lane_label.text = ["上路", "中路", "下路"][lane]
-		lane_label.custom_minimum_size = Vector2(44, 62)
-		lane_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lane_label.add_theme_font_size_override("font_size", 15)
-		lane_row.add_child(lane_label)
-
-		var p_box := HBoxContainer.new()
-		p_box.add_theme_constant_override("separation", 4)
-		lane_row.add_child(p_box)
-		var player_slots: Array = []
-		for col in range(ROWS):
-			var row := ROWS - 1 - col
-			var button := _make_slot_button("player", lane, row)
-			p_box.add_child(button)
-			player_slots.append(button)
-		slot_buttons["player"].append(player_slots)
-
-		var bomb_view := BombView.new()
-		lane_row.add_child(bomb_view)
-		bomb_views.append(bomb_view)
-
-		var e_box := HBoxContainer.new()
-		e_box.add_theme_constant_override("separation", 4)
-		lane_row.add_child(e_box)
-		var enemy_slots: Array = []
-		for col in range(ROWS):
-			var row := col
-			var button := _make_slot_button("enemy", lane, row)
-			e_box.add_child(button)
-			enemy_slots.append(button)
-		slot_buttons["enemy"].append(enemy_slots)
+	# 占出棋盘区域（3D 场景渲染在覆盖层下方）
+	var board_spacer := Control.new()
+	board_spacer.custom_minimum_size = Vector2(1200, 330)
+	board_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main.add_child(board_spacer)
 
 	# 手牌
 	var hand_row := HBoxContainer.new()
@@ -1094,34 +1222,6 @@ func _make_bar(max_value: float, color: Color) -> ProgressBar:
 	return bar
 
 
-func _zone_header(container: HBoxContainer, side: String) -> void:
-	for col in range(ROWS):
-		var row := ROWS - 1 - col if side == "player" else col
-		var zone := zone_of_row(row)
-		var w := 78 if zone == "near" else (72 if zone == "mid" else 66)
-		var label := Label.new()
-		label.text = ZONE_NAMES[zone]
-		label.custom_minimum_size = Vector2(w, 18)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.add_theme_font_size_override("font_size", 11)
-		label.add_theme_color_override("font_color", Color("#697887"))
-		container.add_child(label)
-
-
-func _make_slot_button(side: String, lane: int, row: int) -> Button:
-	var button := Button.new()
-	var zone := zone_of_row(row)
-	var size := Vector2(78, 64) if zone == "near" else (Vector2(72, 58) if zone == "mid" else Vector2(66, 52))
-	button.custom_minimum_size = size
-	button.add_theme_font_size_override("font_size", 11)
-	button.clip_text = true
-	button.set_meta("row", row)
-	button.set_meta("zone", zone)
-	button.pressed.connect(_on_slot.bind(side, lane, row))
-	_update_slot(button, null, side)
-	return button
-
-
 func _on_slot(side: String, lane: int, row: int) -> void:
 	if side != "player":
 		return
@@ -1167,14 +1267,9 @@ func _refresh() -> void:
 	level_label.text = String(LEVELS[level_id]["special"])
 	for id in level_buttons:
 		level_buttons[id].modulate = Color("#7fe4dd") if String(id) == level_id else Color.WHITE
-	for lane in range(LANES):
-		bomb_views[lane].set_state(float(bombs[lane]["pos"]), float(bombs[lane]["timer"]))
-	for lane in range(LANES):
-		for col in range(ROWS):
-			var row := ROWS - 1 - col
-			_update_slot(slot_buttons["player"][lane][col], board["player"][lane][row], "player")
-			_update_slot(slot_buttons["enemy"][lane][col], board["enemy"][lane][col], "enemy")
-	_apply_slot_highlight()
+
+	_sync_board_visuals()
+
 	for i in range(hand_buttons.size()):
 		var button: Button = hand_buttons[i]
 		if i >= hand.size():
@@ -1218,54 +1313,9 @@ func _phase_text() -> String:
 	return ""
 
 
-func _update_slot(button: Button, unit, side: String) -> void:
-	button.modulate = Color.WHITE
-	if unit == null:
-		var zone := zone_of_row(int(button.get_meta("row", 0)))
-		var tint: Color = {"near": Color("#16324a"), "mid": Color("#132436"), "far": Color("#101a2a")}[zone]
-		button.text = ""
-		button.disabled = false
-		button.add_theme_stylebox_override("normal", _flat(tint, Color("#24313b"), 4))
-		button.add_theme_stylebox_override("hover", _flat(tint.lightened(0.06), Color("#31495c"), 4))
-		button.add_theme_color_override("font_color", Color("#94a3b8"))
-		return
-	var type_color: Color = TYPE_COLORS.get(String(unit.type), Color("#e2e8f0"))
-	var note := "%.0fs" % maxf(0.0, float(unit.duration)) if unit.type == "control" else "×%d" % maxi(0, int(unit.actions))
-	button.text = "%s\n%s" % [unit.name, note]
-	button.add_theme_stylebox_override("normal", _flat(type_color.darkened(0.62), type_color, 4))
-	button.add_theme_stylebox_override("hover", _flat(type_color.darkened(0.5), type_color, 4))
-	button.add_theme_color_override("font_color", Color("#f8fafc"))
-
-
-# 选中手牌后：可放置的空槽亮绿，可覆盖的已有单位槽亮琥珀，不符合区域的槽压暗
-func _apply_slot_highlight() -> void:
-	var card_id := ""
-	if selected_card >= 0 and selected_card < hand.size():
-		card_id = String(hand[selected_card])
-	for lane in range(LANES):
-		for col in range(ROWS):
-			var button: Button = slot_buttons["player"][lane][col]
-			var row := ROWS - 1 - col
-			if card_id == "":
-				button.modulate = Color.WHITE
-				continue
-			var unit = board["player"][lane][row]
-			if not card_fits(card_id, row):
-				button.modulate = Color(0.5, 0.5, 0.5)
-				button.add_theme_stylebox_override("normal", _flat(Color("#0e1622"), Color("#1d2a36"), 4))
-			elif unit != null:
-				button.modulate = Color.WHITE
-				button.add_theme_stylebox_override("normal", _flat(Color("#3a2f16"), Color("#fbbf24"), 4))
-			else:
-				button.modulate = Color.WHITE
-				button.add_theme_stylebox_override("normal", _flat(Color("#123a33"), Color("#34d399"), 4))
-
-
 # ---------------------------------------------------------------- 存档点（调试用）
 
 func state_text() -> String:
-	return "hp %d/%d · bomb %s · stamina %d" % [
-		player_hp, enemy_hp,
-		", ".join(bombs.map(func(b): return "%.1f" % float(b["pos"]))),
-		player_stamina
+	return "hp %d/%d · bomb %.1f · stamina %d" % [
+		player_hp, enemy_hp, bomb_pos, player_stamina
 	]

@@ -54,14 +54,15 @@ func _run() -> void:
 	assert(battle.try_deploy("tt_main", push_index, 1, 0), "deploy a fast card mid lane")
 	assert(battle.player_stamina == 100 - 13, "fast card costs 13 after the stick discount")
 	battle.start_battle()
-	var bomb: Dictionary = battle.bombs[1]
-	var before := float(bomb["pos"])
-	# 对手中路有快攻，先清掉它让推力不被反制影响
-	for row in range(7):
-		battle.board["enemy"][1][row] = null
+	battle.bomb_pos = 0.0
+	var before: float = battle.bomb_pos
+	# 清掉全部敌方单位，避免其他路推力混入共享炸弹
+	for lane in range(3):
+		for row in range(7):
+			battle.board["enemy"][lane][row] = null
 	battle.tick(0.1)
-	assert(float(bomb["pos"]) > before, "fast card pushes the bomb toward the enemy half: %.2f" % float(bomb["pos"]))
-	assert(float(bomb["pos"]) > 0.9, "fast push is at least ~1 grid")
+	assert(battle.bomb_pos > before, "fast card pushes the bomb toward the enemy half: %.2f" % battle.bomb_pos)
+	assert(battle.bomb_pos > 0.9, "fast push is at least ~1 grid")
 
 	# 定时引爆伤害
 	battle.restart()
@@ -69,11 +70,11 @@ func _run() -> void:
 	_clear(battle)
 	battle.start_battle()
 	var hp_before: int = battle.enemy_hp
-	battle.bombs[0]["pos"] = 2.0
-	battle.bombs[0]["timer"] = 0.05
+	battle.bomb_pos = 2.0
+	battle.bomb_timer = 0.05
 	battle.tick(0.1)
 	assert(battle.enemy_hp == hp_before - 15, "timer detonation hurts the side the bomb sits on: %d" % battle.enemy_hp)
-	assert(absf(float(battle.bombs[0]["pos"])) < 0.01, "bomb resets to the centre line: %.2f" % float(battle.bombs[0]["pos"]))
+	assert(absf(battle.bomb_pos) < 0.01, "bomb resets to the centre line: %.2f" % battle.bomb_pos)
 
 	# 推到底线立即引爆
 	battle.restart()
@@ -121,10 +122,10 @@ func _run() -> void:
 	var fast_unit = battle.board["player"][1][0]
 	battle._spawn("tt_backhand_counter", "enemy", 1, 2, false)
 	var counter_unit = battle.board["enemy"][1][2]
-	battle.bombs[1]["pos"] = 0.0
+	battle.bomb_pos = 0.0
 	battle.start_battle()
 	battle._press(fast_unit, counter_unit)
-	assert(float(battle.bombs[1]["pos"]) < 1.0, "反手反拉 pushes back part of the fast shot: %.2f" % float(battle.bombs[1]["pos"]))
+	assert(battle.bomb_pos < 1.0, "反手反拉 pushes back part of the fast shot: %.2f" % battle.bomb_pos)
 	assert(int(counter_unit.actions) == 1, "borrowing spends one counter action")
 
 	# 小孩哥童子功：敌方快攻多一次出手
@@ -141,7 +142,7 @@ func _run() -> void:
 	var elder_unit = battle.board["enemy"][1][5]
 	battle.start_battle()
 	battle._press(heavy, elder_unit)
-	assert(float(battle.bombs[1]["pos"]) < 1.5, "elder soft hands cut the spin push: %.2f" % float(battle.bombs[1]["pos"]))
+	assert(battle.bomb_pos < 1.5, "elder soft hands cut the spin push: %.2f" % battle.bomb_pos)
 
 	# 生命归零结算
 	battle.level_id = "CH0-B01"

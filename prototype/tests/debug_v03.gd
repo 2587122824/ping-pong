@@ -28,9 +28,7 @@ func _run() -> void:
 		if steps % 5 == 0:
 			battle.auto_deploy()
 		if battle.battle_time >= next_dump:
-			var bp := ""
-			for lane in range(3):
-				bp += "L%d=%.1f " % [lane, float(battle.bombs[lane]["pos"])]
+			var bp := "bomb=%.1f" % battle.bomb_pos
 			print("t=%5.1f P_HP=%3d E_HP=%3d P_ST=%4.0f E_ST=%4.0f P_U=%d E_U=%d %s" % [
 				battle.battle_time, battle.player_hp, battle.enemy_hp,
 				battle.player_stamina, battle.enemy_stamina,
