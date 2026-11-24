@@ -1635,6 +1635,13 @@ func _open_formation_battle() -> void:
 	if scene == null:
 		interaction_hint.text = "无法载入阵战原型"
 		return
+	# 布阵原型是全屏界面，先收起探索常驻 HUD（左侧状态面板 + 右侧背包/菜单面板 + 交互提示）
+	if player_status_hud != null:
+		player_status_hud.visible = false
+	if economy_hud != null:
+		economy_hud.visible = false
+	if interaction_hint != null:
+		interaction_hint.visible = false
 	formation_battle = scene.instantiate()
 	add_child(formation_battle)
 
@@ -1642,6 +1649,12 @@ func _close_formation_battle() -> void:
 	if formation_battle != null and is_instance_valid(formation_battle):
 		formation_battle.queue_free()
 	formation_battle = null
+	if player_status_hud != null:
+		player_status_hud.visible = true
+	if economy_hud != null:
+		economy_hud.visible = true
+	if interaction_hint != null:
+		interaction_hint.visible = true
 
 func _is_modal_open() -> bool:
 	return (dialogue_panel != null and dialogue_panel.visible) or (shop_panel != null and shop_panel.visible) or (battle_panel != null and battle_panel.visible) or (level_select_panel != null and level_select_panel.visible) or (deck_view_panel != null and deck_view_panel.visible) or (codex_panel != null and codex_panel.visible) or (equipment_panel != null and equipment_panel.visible) or (talent_panel != null and talent_panel.visible) or (formation_battle != null and formation_battle.visible)

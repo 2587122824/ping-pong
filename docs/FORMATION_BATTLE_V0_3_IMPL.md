@@ -94,3 +94,4 @@
 - 旧 V0.2 HP 单位体系（`formation_battle.gd/.tscn`、`formation_unit.gd`、`formation_card_view.gd`、`formation_slot_view.gd`）及全部旧探针/测试（`smoke_formation.gd`、`smoke_formation_tt.gd`、`balance_tt.gd`、`balance_formation.gd`、`balance_tuning.gd`、`level1_probe.gd`、`refill_probe.gd`）已于 2026-11-24 删除；`main.gd` 的布阵入口（F2 / 布阵按钮）改挂 `formation_battle_v03.tscn`。
 - 历史设计文档 `FORMATION_BATTLE_V0_1.md` / `FORMATION_BATTLE_V0_2.md` / `BALANCE_BASELINE_V0_1.md` 保留为历史记录，对应原型代码已不在仓库。
 - 回合制牌战线（`main.gd` + `smoke_battle.gd` 等）与 V0.3 布阵重构互不依赖。
+- 布阵原型打开时（`_open_formation_battle`）收起探索常驻 HUD：左侧 `player_status_hud`、右侧 `economy_hud`、顶部 `interaction_hint`；关闭（`_close_formation_battle`）后全部恢复可见。回归测试 `smoke_hud.gd` 校验显隐与恢复。
