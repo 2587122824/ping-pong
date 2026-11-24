@@ -95,3 +95,5 @@
 - 历史设计文档 `FORMATION_BATTLE_V0_1.md` / `FORMATION_BATTLE_V0_2.md` / `BALANCE_BASELINE_V0_1.md` 保留为历史记录，对应原型代码已不在仓库。
 - 回合制牌战线（`main.gd` + `smoke_battle.gd` 等）与 V0.3 布阵重构互不依赖。
 - 布阵原型打开时（`_open_formation_battle`）收起探索常驻 HUD：左侧 `player_status_hud`、右侧 `economy_hud`、顶部 `interaction_hint`；关闭（`_close_formation_battle`）后全部恢复可见。回归测试 `smoke_hud.gd` 校验显隐与恢复。
+- 布阵原型由节点自身 `_process(delta)` 驱动 `tick()`（`auto_tick=false` 时关闭，供 headless 测试手动推进）；此前真实窗口开战後时间/炸弹不走，已修复。
+- 界面层 2026-11-24 重写：棋盘按设计 §2 分半场（我方远→近 / 炸弹 / 敌方近→远），表头标注近/中/远台；单位按 fast/spin/control/counter 四色描边，手牌卡片显示费用·区域·出手/持续·可出状态；双方生命条与我方体力条分行展示。战斗逻辑、常量与卡表未改动。

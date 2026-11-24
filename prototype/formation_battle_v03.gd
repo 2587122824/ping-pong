@@ -159,9 +159,18 @@ var enemy_deploy_timer := ENEMY_DEPLOY_INTERVAL
 var stamina_timer := 0.0
 
 # UI
+const TYPE_COLORS := {
+	"fast": Color("#fb923c"),
+	"spin": Color("#f472b6"),
+	"control": Color("#34d399"),
+	"counter": Color("#60a5fa")
+}
+
 var root: Control
-var hp_label: Label
+var player_hp_label: Label
 var enemy_hp_label: Label
+var player_hp_bar: ProgressBar
+var enemy_hp_bar: ProgressBar
 var stamina_bar: ProgressBar
 var stamina_label: Label
 var timer_label: Label
@@ -478,6 +487,11 @@ func tick(delta: float) -> void:
 		_step(step)
 		elapsed += step
 	_refresh()
+
+
+func _process(delta: float) -> void:
+	if auto_tick:
+		tick(delta)
 
 
 func _step(delta: float) -> void:
@@ -810,52 +824,92 @@ func _build_ui() -> void:
 	root.add_child(bg)
 
 	var main := VBoxContainer.new()
-	main.position = Vector2(24, 16)
-	main.size = Vector2(1120, 680)
+	main.position = Vector2(20, 14)
+	main.size = Vector2(1240, 692)
 	main.add_theme_constant_override("separation", 8)
 	root.add_child(main)
 
+	# 顶部第一行：关卡切换 + 能力说明 + 计时
 	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 12)
+	top.add_theme_constant_override("separation", 10)
 	main.add_child(top)
 	for id in LEVELS.keys():
 		var button := Button.new()
 		button.text = String(LEVELS[id]["name"]).split(" · ")[1]
+		button.custom_minimum_size = Vector2(96, 34)
 		button.pressed.connect(_on_level.bind(String(id)))
 		level_buttons[id] = button
 		top.add_child(button)
 	level_label = Label.new()
-	level_label.text = ""
+	level_label.add_theme_font_size_override("font_size", 15)
+	level_label.add_theme_color_override("font_color", Color("#d9f1ff"))
 	top.add_child(level_label)
+	var top_spacer := Control.new()
+	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top.add_child(top_spacer)
 	timer_label = Label.new()
+	timer_label.add_theme_font_size_override("font_size", 15)
+	timer_label.add_theme_color_override("font_color", Color("#a9bfd1"))
 	top.add_child(timer_label)
 
+	# 顶部第二行：双方生命条 + 我方体力条
 	var status := HBoxContainer.new()
-	status.add_theme_constant_override("separation", 12)
+	status.add_theme_constant_override("separation", 16)
 	main.add_child(status)
-	hp_label = Label.new()
-	status.add_child(hp_label)
+	player_hp_label = Label.new()
+	player_hp_label.custom_minimum_size = Vector2(150, 22)
+	status.add_child(player_hp_label)
+	player_hp_bar = _make_bar(PLAYER_MAX_HP, Color("#4ade80"))
+	status.add_child(player_hp_bar)
 	enemy_hp_label = Label.new()
+	enemy_hp_label.custom_minimum_size = Vector2(150, 22)
 	status.add_child(enemy_hp_label)
+	enemy_hp_bar = _make_bar(150, Color("#f87171"))
+	status.add_child(enemy_hp_bar)
+	var st_spacer := Control.new()
+	st_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	status.add_child(st_spacer)
+	stamina_label = Label.new()
+	status.add_child(stamina_label)
 	stamina_bar = ProgressBar.new()
 	stamina_bar.max_value = STAMINA_MAX
 	stamina_bar.custom_minimum_size = Vector2(160, 18)
+	stamina_bar.show_percentage = false
 	status.add_child(stamina_bar)
-	stamina_label = Label.new()
-	status.add_child(stamina_label)
 
+	# 棋盘
 	var board_box := VBoxContainer.new()
 	board_box.add_theme_constant_override("separation", 6)
 	main.add_child(board_box)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 4)
+	board_box.add_child(header)
+	var lane_spacer := Label.new()
+	lane_spacer.custom_minimum_size = Vector2(44, 18)
+	header.add_child(lane_spacer)
+	_zone_header(header, "player")
+	var bomb_head := Label.new()
+	bomb_head.text = "炸弹"
+	bomb_head.custom_minimum_size = Vector2(90, 18)
+	bomb_head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bomb_head.add_theme_font_size_override("font_size", 12)
+	bomb_head.add_theme_color_override("font_color", Color("#8aa4b8"))
+	header.add_child(bomb_head)
+	_zone_header(header, "enemy")
+
 	slot_buttons = {"player": [], "enemy": []}
 	for lane in range(LANES):
 		var lane_row := HBoxContainer.new()
-		lane_row.add_theme_constant_override("separation", 6)
+		lane_row.add_theme_constant_override("separation", 4)
 		board_box.add_child(lane_row)
 		var lane_label := Label.new()
 		lane_label.text = ["上路", "中路", "下路"][lane]
-		lane_label.custom_minimum_size = Vector2(40, 54)
+		lane_label.custom_minimum_size = Vector2(44, 62)
+		lane_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lane_label.add_theme_font_size_override("font_size", 15)
 		lane_row.add_child(lane_label)
+
 		var p_box := HBoxContainer.new()
 		p_box.add_theme_constant_override("separation", 4)
 		lane_row.add_child(p_box)
@@ -866,12 +920,15 @@ func _build_ui() -> void:
 			p_box.add_child(button)
 			player_slots.append(button)
 		slot_buttons["player"].append(player_slots)
+
 		var bomb_label := Label.new()
-		bomb_label.text = "◆"
-		bomb_label.custom_minimum_size = Vector2(72, 54)
+		bomb_label.custom_minimum_size = Vector2(90, 62)
 		bomb_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		bomb_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		bomb_label.add_theme_font_size_override("font_size", 13)
 		lane_row.add_child(bomb_label)
 		bomb_labels.append(bomb_label)
+
 		var e_box := HBoxContainer.new()
 		e_box.add_theme_constant_override("separation", 4)
 		lane_row.add_child(e_box)
@@ -883,49 +940,87 @@ func _build_ui() -> void:
 			enemy_slots.append(button)
 		slot_buttons["enemy"].append(enemy_slots)
 
+	# 手牌
 	var hand_row := HBoxContainer.new()
-	hand_row.add_theme_constant_override("separation", 6)
+	hand_row.add_theme_constant_override("separation", 8)
 	main.add_child(hand_row)
 	hand_bar = hand_row
 	for i in range(HAND_SIZE):
 		var button := Button.new()
-		button.custom_minimum_size = Vector2(120, 96)
+		button.custom_minimum_size = Vector2(236, 104)
+		button.add_theme_font_size_override("font_size", 14)
 		button.pressed.connect(_on_hand_pressed.bind(i))
 		hand_buttons.append(button)
 		hand_row.add_child(button)
 
+	# 底部操作 + 日志
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 10)
 	main.add_child(bottom)
 	auto_button = Button.new()
 	auto_button.text = "自动布阵"
+	auto_button.custom_minimum_size = Vector2(110, 38)
 	auto_button.pressed.connect(func(): auto_deploy())
 	bottom.add_child(auto_button)
 	start_button = Button.new()
 	start_button.text = "开战 / 重开"
+	start_button.custom_minimum_size = Vector2(130, 38)
 	start_button.pressed.connect(_on_start)
 	bottom.add_child(start_button)
 	feedback_label = Label.new()
+	feedback_label.add_theme_font_size_override("font_size", 15)
 	bottom.add_child(feedback_label)
 
 	log_label = Label.new()
 	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	log_label.custom_minimum_size = Vector2(1080, 120)
+	log_label.custom_minimum_size = Vector2(1220, 104)
+	log_label.add_theme_font_size_override("font_size", 13)
+	log_label.add_theme_color_override("font_color", Color("#a9bfd1"))
 	main.add_child(log_label)
+
+
+func _flat(bg: Color, border: Color, radius := 6) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new()
+	s.bg_color = bg
+	s.border_color = border
+	s.set_border_width_all(1)
+	s.set_corner_radius_all(radius)
+	return s
+
+
+func _make_bar(max_value: float, color: Color) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.max_value = max_value
+	bar.custom_minimum_size = Vector2(150, 18)
+	bar.show_percentage = false
+	bar.add_theme_stylebox_override("background", _flat(Color("#1b2a3a"), Color("#31495c"), 3))
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = color
+	fill.set_corner_radius_all(3)
+	bar.add_theme_stylebox_override("fill", fill)
+	return bar
+
+
+func _zone_header(container: HBoxContainer, side: String) -> void:
+	for col in range(ROWS):
+		var row := ROWS - 1 - col if side == "player" else col
+		var label := Label.new()
+		label.text = ZONE_NAMES[zone_of_row(row)]
+		label.custom_minimum_size = Vector2(74, 18)
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.add_theme_font_size_override("font_size", 11)
+		label.add_theme_color_override("font_color", Color("#697887"))
+		container.add_child(label)
 
 
 func _make_slot_button(side: String, lane: int, row: int) -> Button:
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(64, 54)
-	button.add_theme_font_size_override("font_size", 10)
-	var zone := zone_of_row(row)
-	var tint := Color("#132436")
-	if zone == "near":
-		tint = Color("#16324a")
-	elif zone == "far":
-		tint = Color("#101a2a")
-	button.modulate = tint
+	button.custom_minimum_size = Vector2(74, 62)
+	button.add_theme_font_size_override("font_size", 11)
+	button.clip_text = true
+	button.set_meta("row", row)
 	button.pressed.connect(_on_slot.bind(side, lane, row))
+	_update_slot(button, null, side)
 	return button
 
 
@@ -960,10 +1055,14 @@ func _on_start() -> void:
 
 
 func _refresh() -> void:
-	if not ui_enabled or hp_label == null:
+	if not ui_enabled or player_hp_label == null:
 		return
-	hp_label.text = "我方生命 %d / %d" % [maxi(0, player_hp), PLAYER_MAX_HP]
+	player_hp_label.text = "我方生命 %d / %d" % [maxi(0, player_hp), PLAYER_MAX_HP]
 	enemy_hp_label.text = "敌方生命 %d" % maxi(0, enemy_hp)
+	player_hp_bar.max_value = PLAYER_MAX_HP
+	player_hp_bar.value = maxi(0, player_hp)
+	enemy_hp_bar.max_value = int(LEVELS[level_id]["hp"])
+	enemy_hp_bar.value = maxi(0, enemy_hp)
 	stamina_bar.value = player_stamina
 	stamina_label.text = "体力 %d / %d" % [player_stamina, STAMINA_MAX]
 	timer_label.text = "回合 %.1f / %.0f s  %s" % [battle_time, BATTLE_LIMIT, _phase_text()]
@@ -994,13 +1093,20 @@ func _refresh() -> void:
 		var selected := i == selected_card
 		var cost := card_cost(card_id, "player")
 		var afford := player_stamina >= cost
+		var type_color: Color = TYPE_COLORS[String(def["type"])]
+		var main_line := "出手 %d 次" % card_actions(card_id, "player") if int(def.get("actions", 0)) > 0 else "持续 %.0fs" % float(def.get("duration", 0.0))
 		button.text = "%s\n%d 体力 · %s\n%s\n%s" % [
 			String(def["name"]), cost, ZONE_NAMES[String(def["zone"][0])],
-			"出手 %d 次" % card_actions(card_id, "player") if int(def.get("actions", 0)) > 0 else "持续 %.0fs" % float(def.get("duration", 0.0)),
-			"可出牌" if afford else "体力不足"
+			main_line, "可出牌" if afford else "体力不足"
 		]
 		button.disabled = false
-		button.modulate = Color("#7fe4dd") if selected else (Color.WHITE if afford else Color("#64748b"))
+		var bg := Color("#172635") if afford else Color("#111a23")
+		var border := type_color if selected else (Color("#31495c") if afford else Color("#24313b"))
+		button.add_theme_stylebox_override("normal", _flat(bg, border))
+		button.add_theme_stylebox_override("hover", _flat(bg.lightened(0.08), border))
+		button.add_theme_stylebox_override("pressed", _flat(bg.darkened(0.08), border))
+		button.add_theme_stylebox_override("disabled", _flat(Color("#111a23"), Color("#24313b")))
+		button.add_theme_color_override("font_color", Color("#edf7ff") if afford else Color("#697887"))
 	log_label.text = "\n".join(log_lines)
 	if feedback_label != null:
 		feedback_label.text = feedback
@@ -1021,26 +1127,20 @@ func _phase_text() -> String:
 
 func _update_slot(button: Button, unit, side: String) -> void:
 	if unit == null:
-		button.text = "·"
-		button.modulate = Color("#64748b") if side == "enemy" else Color("#94a3b8")
+		var zone := zone_of_row(int(button.get_meta("row", 0)))
+		var tint: Color = {"near": Color("#16324a"), "mid": Color("#132436"), "far": Color("#101a2a")}[zone]
+		button.text = ""
+		button.disabled = false
+		button.add_theme_stylebox_override("normal", _flat(tint, Color("#24313b"), 4))
+		button.add_theme_stylebox_override("hover", _flat(tint.lightened(0.06), Color("#31495c"), 4))
+		button.add_theme_color_override("font_color", Color("#94a3b8"))
 		return
-	var note := ""
-	if unit.type == "control":
-		note = "%.0fs" % maxf(0.0, float(unit.duration))
-	else:
-		note = "×%d" % maxi(0, int(unit.actions))
+	var type_color: Color = TYPE_COLORS.get(String(unit.type), Color("#e2e8f0"))
+	var note := "%.0fs" % maxf(0.0, float(unit.duration)) if unit.type == "control" else "×%d" % maxi(0, int(unit.actions))
 	button.text = "%s\n%s" % [unit.name, note]
-	match String(unit.type):
-		"fast":
-			button.modulate = Color("#fb923c")
-		"spin":
-			button.modulate = Color("#f472b6")
-		"control":
-			button.modulate = Color("#34d399")
-		"counter":
-			button.modulate = Color("#60a5fa")
-		_:
-			button.modulate = Color("#e2e8f0")
+	button.add_theme_stylebox_override("normal", _flat(type_color.darkened(0.62), type_color, 4))
+	button.add_theme_stylebox_override("hover", _flat(type_color.darkened(0.5), type_color, 4))
+	button.add_theme_color_override("font_color", Color("#f8fafc"))
 
 
 # ---------------------------------------------------------------- 存档点（调试用）
