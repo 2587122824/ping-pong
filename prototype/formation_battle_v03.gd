@@ -1354,10 +1354,10 @@ func _sync_tokens() -> void:
 					# 头顶卡牌名标签
 					var label := Label3D.new()
 					label.name = "unit_label"
-					label.position = Vector3(0.0, 0.62, 0.0)
-					label.font_size = 22
-					label.pixel_size = 0.010
-					label.outline_size = 6
+					label.position = Vector3(0.0, 0.68, 0.0)
+					label.font_size = 30
+					label.pixel_size = 0.014
+					label.outline_size = 8
 					label.outline_modulate = Color("#0b1220")
 					label.billboard = 1
 					token.add_child(label)
