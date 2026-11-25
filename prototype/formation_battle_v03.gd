@@ -169,6 +169,7 @@ var bomb_cooldown := 0.0
 # 炸弹视觉位置（缓动用，避免每次推力直接瞬移）
 var bomb_vis_x := 0.0
 var bomb_vis_z := 0.0
+var last_tick_sec := -1
 
 var hand: Array = []
 var draw_pile: Array = []
@@ -184,6 +185,13 @@ var stamina_timer := 0.0
 var lane_push := [0.0, 0.0, 0.0]
 # 战场浮动跳字 {node, life}
 var floaters: Array = []
+# 炸弹尾焰渐隐 puff {node, life}
+var trail_puffs: Array = []
+# 连携彩色光弧导轨 MeshInstance3D 列表
+var combo_lines: Array = []
+# 合成音效缓存 kind -> AudioStreamWAV；播放节点 kind -> AudioStreamPlayer
+var sfx_cache: Dictionary = {}
+var sfx_players: Dictionary = {}
 
 const TYPE_COLORS := {
 	"fast": Color("#fb923c"),
@@ -267,6 +275,14 @@ func restart() -> void:
 		if f.get("node") != null and is_instance_valid(f["node"]):
 			f["node"].queue_free()
 	floaters.clear()
+	for p in trail_puffs:
+		if p.get("node") != null and is_instance_valid(p["node"]):
+			p["node"].queue_free()
+	trail_puffs.clear()
+	for line in combo_lines:
+		if is_instance_valid(line):
+			line.queue_free()
+	combo_lines.clear()
 	board = {}
 	for side in ["player", "enemy"]:
 		var lanes: Array = []
@@ -283,6 +299,7 @@ func restart() -> void:
 	bomb_cooldown = 0.0
 	bomb_vis_x = 0.0
 	bomb_vis_z = 0.0
+	last_tick_sec = -1
 	hand = []
 	draw_pile = []
 	discard = []
@@ -398,6 +415,7 @@ func _spawn(card_id: String, side: String, lane: int, row: int, pay := true) -> 
 		_log("换阵变招：%s 入场抢攻" % unit.name)
 	# 落子弹性缩放回弹
 	unit["pop"] = 0.12
+	_play_sfx("deploy")
 	_log("%s %s → %s·%s" % ["我方" if side == "player" else "敌方", unit.name, ["上", "中", "下"][lane], ZONE_NAMES[zone_of_row(row)]])
 	return true
 
@@ -564,6 +582,7 @@ func _process(delta: float) -> void:
 	_update_bomb_visual(delta)
 	_update_floaters(delta)
 	_update_pop(delta)
+	_update_trail(delta)
 
 
 func _update_pop(delta: float) -> void:
@@ -601,6 +620,8 @@ func _update_bomb_visual(delta: float) -> void:
 	if bomb_node != null:
 		bomb_node.visible = bomb_cooldown <= 0.0
 		bomb_node.position = Vector3(bomb_vis_x, 0.42, bomb_vis_z)
+	if bomb_cooldown <= 0.0:
+		_spawn_trail_puff()
 	_update_bomb_countdown()
 
 
@@ -614,6 +635,11 @@ func _update_bomb_countdown() -> void:
 	bomb_label.visible = true
 	var remain := maxf(0.0, bomb_timer)
 	bomb_label.text = str(ceili(remain))
+	# 最后两秒逐秒滴答提示
+	var sec := ceili(remain)
+	if remain <= 2.0 and sec != last_tick_sec:
+		_play_sfx("tick")
+		last_tick_sec = sec
 	var col := Color("#7fe4dd")
 	if remain <= 2.0:
 		col = Color("#fb7185")
@@ -704,6 +730,7 @@ func _advance_unit(unit, delta: float) -> void:
 	# 【双拍连击】同路同时存在正手与反手招式：双方出手间隔 -10%
 	if _lane_has_forehand(unit.side, int(unit.lane)) and _lane_has_backhand(unit.side, int(unit.lane)):
 		interval *= 0.9
+		_play_sfx("combo")
 	unit.cooldown = interval
 
 
@@ -814,6 +841,7 @@ func _press(unit, target) -> void:
 		push *= 1.25
 		_log("调动起板：%s 重击推力 +25%%" % unit.name)
 		_spawn_floater(_unit_world(unit), "调动起板", "#4cc9f0")
+		_play_sfx("combo")
 	# 控台压制（debuff 跟随目标所在路，跨路支援不落空）
 	push *= _debuff_ratio(unit, tlane)
 	# 敌方反拉类借力反推
@@ -835,6 +863,7 @@ func _press(unit, target) -> void:
 		_push(defender_side, lane, back)
 		_log("%s 吃转：反推 %.1f 格" % [String(serve.name), back])
 	_push(unit.side, lane, push)
+	_play_sfx("hit")
 	# 扣杀：炸弹已在敌方半场时直接推到底线引爆
 	if bool(CARDS[unit.card].get("smash_detonate", false)):
 		if unit.side == "player" and bomb_pos > 0.5:
@@ -917,7 +946,9 @@ func _reflect(unit, target, push: float) -> float:
 		back *= 1.20
 		_log("防守反击链：%s 反推力 +20%%" % target.name)
 		_spawn_floater(_unit_world(target), "反击链", "#ff8fa3")
+		_play_sfx("combo")
 	_push(target.side, int(unit.lane), back)
+	_play_sfx("reflect")
 	target.actions = int(target.actions) - 1
 	_log("%s 借力反推 %.1f 格" % [target.name, back])
 	if int(target.actions) <= 0:
@@ -977,6 +1008,7 @@ func _detonate(reason: String) -> void:
 	# 局部冲击波：震掉受击方前排近台单位的部分出手（设计 §3.2）
 	_shockwave(hit_side)
 	play_explosion()
+	_play_sfx("explode")
 	bomb_pos = 0.0
 	bomb_cooldown = BOMB_RESPAWN
 	if bomb_node != null:
@@ -1153,6 +1185,196 @@ func _dominant_lane() -> int:
 			best_val = absf(lane_push[i])
 			best = i
 	return best
+
+
+# ---------------- 合成音效（运行时生成 PCM，不依赖外部音频导入） ----------------
+
+func _play_sfx(kind: String) -> void:
+	var player: AudioStreamPlayer
+	if sfx_players.has(kind):
+		player = sfx_players[kind]
+	else:
+		player = AudioStreamPlayer.new()
+		add_child(player)
+		sfx_players[kind] = player
+	player.stream = _sfx_stream(kind)
+	player.play()
+
+
+func _sfx_stream(kind: String) -> AudioStreamWAV:
+	if sfx_cache.has(kind):
+		return sfx_cache[kind]
+	var rate := 22050
+	var samples: Array = []
+	match kind:
+		"deploy": samples = _sfx_tone(660.0, 0.07, 0.22, "square")
+		"hit": samples = _sfx_hit(0.09)
+		"reflect": samples = _sfx_tone(440.0, 0.1, 0.22, "sine")
+		"combo": samples = _sfx_combo()
+		"explode": samples = _sfx_boom(0.35)
+		"tick": samples = _sfx_tone(1250.0, 0.04, 0.16, "square")
+	var bytes := PackedByteArray()
+	for s in samples:
+		var v := clampi(int(round(float(s) * 32767.0)), -32768, 32767)
+		bytes.append(v & 0xff)
+		bytes.append((v >> 8) & 0xff)
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.stereo = false
+	stream.data = bytes
+	sfx_cache[kind] = stream
+	return stream
+
+
+func _sfx_tone(freq: float, dur: float, vol: float, wave: String) -> Array:
+	var rate := 22050
+	var n := int(rate * dur)
+	var out: Array = []
+	for i in range(n):
+		var t := float(i) / rate
+		var env := exp(-t * 18.0)
+		var v := 0.0
+		match wave:
+			"sine": v = sin(TAU * freq * t)
+			"square": v = 1.0 if fmod(TAU * freq * t, TAU) < PI else -1.0
+			_: v = sin(TAU * freq * t)
+		out.append(v * vol * env)
+	return out
+
+
+func _sfx_hit(dur: float) -> Array:
+	var rate := 22050
+	var n := int(rate * dur)
+	var out: Array = []
+	for i in range(n):
+		var t := float(i) / rate
+		var env := exp(-t * 22.0)
+		var noise := (randf() * 2.0 - 1.0) * 0.5
+		var thump := sin(TAU * 180.0 * t) * 0.5
+		out.append((noise + thump) * 0.3 * env)
+	return out
+
+
+func _sfx_combo() -> Array:
+	return _sfx_tone(523.0, 0.07, 0.22, "sine") + _sfx_tone(784.0, 0.1, 0.22, "sine")
+
+
+func _sfx_boom(dur: float) -> Array:
+	var rate := 22050
+	var n := int(rate * dur)
+	var out: Array = []
+	for i in range(n):
+		var t := float(i) / rate
+		var env := exp(-t * 7.0)
+		var noise := (randf() * 2.0 - 1.0) * 0.6
+		var low := sin(TAU * 70.0 * t) * 0.5
+		out.append((noise + low) * 0.5 * env)
+	return out
+
+
+# ---------------- 炸弹滑行尾焰 ----------------
+
+func _spawn_trail_puff() -> void:
+	if board_viewport == null:
+		return
+	if trail_puffs.size() >= 16:
+		var old: Dictionary = trail_puffs[0]
+		if is_instance_valid(old.node):
+			old.node.queue_free()
+		trail_puffs.remove_at(0)
+	var puff := MeshInstance3D.new()
+	var sph := SphereMesh.new()
+	sph.radius = 0.14
+	sph.height = 0.28
+	puff.mesh = sph
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color("#ff9e00")
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.emission_enabled = true
+	mat.emission = Color("#ff7b00")
+	mat.emission_energy_multiplier = 0.6
+	puff.material_override = mat
+	var sign_dir := 1.0 if bomb_pos >= 0.0 else -1.0
+	puff.position = Vector3(bomb_vis_x - sign_dir * 0.28, 0.42, bomb_vis_z)
+	board_viewport.add_child(puff)
+	trail_puffs.append({"node": puff, "life": 0.35})
+
+
+func _update_trail(delta: float) -> void:
+	for i in range(trail_puffs.size() - 1, -1, -1):
+		var p: Dictionary = trail_puffs[i]
+		p["life"] = float(p["life"]) - delta
+		var node: MeshInstance3D = p["node"]
+		if node == null or not is_instance_valid(node):
+			trail_puffs.remove_at(i)
+			continue
+		if float(p["life"]) <= 0.0:
+			node.queue_free()
+			trail_puffs.remove_at(i)
+			continue
+		var t: float = clampf(float(p["life"]) / 0.35, 0.0, 1.0)
+		node.scale = Vector3.ONE * (0.3 + 0.7 * t)
+		node.material_override.albedo_color.a = t * 0.55
+
+
+# ---------------- 同路连携虚线光弧 ----------------
+
+func _refresh_combo_lines() -> void:
+	if board_viewport == null:
+		return
+	var links: Array = []
+	for side in ["player", "enemy"]:
+		for lane in range(LANES):
+			var units: Array = []
+			for row in range(ROWS):
+				var u = board[side][lane][row]
+				if u != null and u.alive:
+					units.append(u)
+			var controls := units.filter(func(u): return u.type == "control")
+			var heavies := units.filter(func(u): return bool(CARDS[u.card].get("heavy", false)))
+			var forehands := units.filter(func(u): return String(CARDS[u.card]["name"]).begins_with("正手"))
+			var backhands := units.filter(func(u): return String(CARDS[u.card]["name"]).begins_with("反手"))
+			var counters := units.filter(func(u): return u.type == "counter")
+			var near_pressure := units.filter(func(u): return int(u.row) < 2 and (u.type == "fast" or u.type == "control"))
+			# 调动起板：控台 ↔ 弧圈/重击（青）
+			for c in controls:
+				for h in heavies:
+					links.append({"a": _unit_world(c), "b": _unit_world(h), "color": Color("#4cc9f0")})
+			# 双拍连击：正手 ↔ 反手（金）
+			for f in forehands:
+				for b in backhands:
+					links.append({"a": _unit_world(f), "b": _unit_world(b), "color": Color("#ffd166")})
+			# 防守反击链：近台牵制 ↔ 中台反拉（粉）
+			for n in near_pressure:
+				for c in counters:
+					links.append({"a": _unit_world(n), "b": _unit_world(c), "color": Color("#ff8fa3")})
+	while combo_lines.size() < links.size():
+		var rail := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(0.06, 0.06, 1.0)
+		rail.mesh = box
+		var mat := StandardMaterial3D.new()
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		rail.material_override = mat
+		board_viewport.add_child(rail)
+		combo_lines.append(rail)
+	while combo_lines.size() > links.size():
+		var old_rail: MeshInstance3D = combo_lines.pop_back()
+		old_rail.queue_free()
+	for i in range(links.size()):
+		var rail: MeshInstance3D = combo_lines[i]
+		var a: Vector3 = links[i].a
+		var b: Vector3 = links[i].b
+		rail.position = (a + b) * 0.5
+		var dir := b - a
+		rail.scale = Vector3(1.0, 1.0, dir.length())
+		rail.rotation = Vector3(0.0, atan2(dir.x, dir.z), 0.0)
+		var mat: StandardMaterial3D = rail.material_override
+		mat.albedo_color = links[i].color
+		mat.emission_enabled = true
+		mat.emission = links[i].color
+		mat.emission_energy_multiplier = 0.6
 
 
 func _build_world() -> void:
@@ -1603,6 +1825,7 @@ func _sync_board_visuals() -> void:
 	if panels.is_empty():
 		return
 	_sync_tokens()
+	_refresh_combo_lines()
 
 	var card_id := ""
 	var my_type := ""
