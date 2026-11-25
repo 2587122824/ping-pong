@@ -134,6 +134,22 @@ func _run() -> void:
 	assert(battle.bomb_pos < 1.0, "反手反拉 pushes back part of the fast shot: %.2f" % battle.bomb_pos)
 	assert(int(counter_unit.actions) == 1, "borrowing spends one counter action")
 
+	# 克制压制：明显克制命中削守方出手次数，耗尽则逼退
+	battle.restart()
+	battle.level_id = "CH0-B01"
+	_clear(battle)
+	battle._spawn("tt_loop", "player", 1, 2, false)
+	var suppressor = battle.board["player"][1][2]
+	battle._spawn("tt_sub", "enemy", 1, 0, false)
+	var suppressed = battle.board["enemy"][1][0]
+	var sup_before: int = int(suppressed.actions)
+	battle.start_battle()
+	battle._press(suppressor, suppressed)
+	assert(int(suppressed.actions) == sup_before - 1, "克制命中削 1 次出手: %d" % int(suppressed.actions))
+	suppressed.actions = 1
+	battle._press(suppressor, suppressed)
+	assert(not suppressed.alive, "次数耗尽被克制逼退退场")
+
 	# 转不转发球：来方本路首次进攻吃转，被反推且只触发一次
 	battle.restart()
 	battle.level_id = "CH0-B01"

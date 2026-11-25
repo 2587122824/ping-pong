@@ -28,6 +28,9 @@ const ENEMY_DEPLOY_INTERVAL := 2.4
 const SWAP_REFUND := 0.25
 # 炸弹冲击波：震掉受击方前排（近台）单位的出手次数
 const SHOCKWAVE_DRAIN := 1
+# 克制压制：明显克制（倍率 ≥ 阈值）命中时削守方出手次数；控台单位不吃直接压制
+const COUNTER_SUPPRESS_MULT := 1.3
+const COUNTER_SUPPRESS_DRAIN := 1
 
 const ZONE_ROWS := {"near": [0, 1], "mid": [2, 3, 4], "far": [5, 6]}
 const ZONE_NAMES := {"near": "近台", "mid": "中台", "far": "远台"}
@@ -684,8 +687,13 @@ func _press(unit, target) -> void:
 		mult = float(table.get(String(target.type), 1.0))
 		if mult > 1.0:
 			_log("%s 克制 %s（推力 x%.1f）" % [unit.name, target.name, mult])
-		if bool(CARDS[unit.card].get("drain", false)) and mult >= 1.3 and int(target.actions) > 0 and target.type != "control":
-			target.actions = int(target.actions) - 1
+		# 克制压制（设计 §4.2-3）：明显克制命中时打断守方、削出手次数；
+		# 自带 drain 的卡（快撕/加转弧圈）走同一套削次数，不叠加；控台单位免疫直接压制
+		if target.type != "control" and mult >= COUNTER_SUPPRESS_MULT and int(target.actions) > 0:
+			target.actions = int(target.actions) - COUNTER_SUPPRESS_DRAIN
+			_log("%s 克制压制 %s，削 %d 次出手" % [unit.name, target.name, COUNTER_SUPPRESS_DRAIN])
+			if int(target.actions) <= 0:
+				_exit(target, "被克制招式逼退")
 	push *= mult
 	# 控台压制
 	push *= _debuff_ratio(unit)
