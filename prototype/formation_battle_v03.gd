@@ -206,6 +206,7 @@ var feedback_label: Label
 var level_label: Label
 var hand_bar: HBoxContainer
 var hand_buttons: Array = []
+var icon_cache := {}
 var level_buttons := {}
 var start_button: Button
 var auto_button: Button
@@ -1066,7 +1067,6 @@ func _build_world() -> void:
 	var embers := CPUParticles3D.new()
 	embers.amount = 36
 	embers.lifetime = 4.0
-	embers.preload = 4
 	embers.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	embers.emission_sphere_radius = 6.0
 	embers.direction = Vector3(0.0, 1.0, 0.0)
@@ -1193,6 +1193,18 @@ func _token_color(unit) -> Color:
 	return TYPE_COLORS.get(String(unit.type), Color("#e2e8f0"))
 
 
+func _get_type_icon(card_type: String) -> Texture2D:
+	if icon_cache.has(card_type):
+		return icon_cache[card_type]
+	var img := Image.new()
+	var err := img.load("res://assets/icons/icon_%s.png" % card_type)
+	var tex: Texture2D = null
+	if err == OK:
+		tex = ImageTexture.create_from_image(img)
+	icon_cache[card_type] = tex
+	return tex
+
+
 func _sync_tokens() -> void:
 	if tokens.is_empty():
 		return
@@ -1207,13 +1219,11 @@ func _sync_tokens() -> void:
 						tokens[side][lane][row] = null
 					continue
 				if token == null:
-					token = MeshInstance3D.new()
-					var orb := SphereMesh.new()
-					orb.radius = 0.22
-					orb.height = 0.44
-					token.mesh = orb
-					token.material_override = StandardMaterial3D.new()
+					token = Sprite3D.new()
+					token.texture = _get_type_icon(String(unit.type))
+					token.billboard = 1
 					token.position = _slot_position(side, lane, row) + Vector3(0.0, 0.30, 0.0)
+					token.scale = Vector3(0.42, 0.42, 0.42)
 					board_viewport.add_child(token)
 					# 卡片式方形底座
 					var base := MeshInstance3D.new()
@@ -1234,8 +1244,7 @@ func _sync_tokens() -> void:
 					label.billboard = 1
 					token.add_child(label)
 					tokens[side][lane][row] = token
-				var mat: StandardMaterial3D = token.material_override
-				mat.albedo_color = _token_color(unit)
+				token.texture = _get_type_icon(String(unit.type))
 				var base_mat: StandardMaterial3D = token.get_child(0).material_override
 				base_mat.albedo_color = Color("#1c2735")
 				var unit_label: Label3D = token.get_node_or_null("unit_label")
@@ -1397,12 +1406,13 @@ func _build_ui() -> void:
 		vbox.add_theme_constant_override("separation", 3)
 		card.add_child(vbox)
 		var orb := PanelContainer.new()
-		orb.custom_minimum_size = Vector2(44, 44)
+		orb.custom_minimum_size = Vector2(52, 52)
 		orb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		var orb_name := Label.new()
-		orb_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		orb_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		orb.add_child(orb_name)
+		var orb_tex := TextureRect.new()
+		orb_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		orb_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		orb_tex.set_anchors_preset(Control.PRESET_FULL_RECT)
+		orb.add_child(orb_tex)
 		vbox.add_child(orb)
 		var name_l := Label.new()
 		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1416,7 +1426,7 @@ func _build_ui() -> void:
 		var pips_l := Label.new()
 		pips_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vbox.add_child(pips_l)
-		card.set_meta("refs", {"orb": orb, "orb_name": orb_name, "name": name_l, "cost": cost_l, "action": action_l, "pips": pips_l})
+		card.set_meta("refs", {"orb": orb, "orb_tex": orb_tex, "name": name_l, "cost": cost_l, "action": action_l, "pips": pips_l})
 		hand_buttons.append(card)
 		hand_row.add_child(card)
 
@@ -1553,6 +1563,9 @@ func _refresh() -> void:
 		var action_l: Label = refs["action"]
 		var pips_l: Label = refs["pips"]
 		var orb: PanelContainer = refs["orb"]
+		var orb_tex: TextureRect = refs["orb_tex"]
+		orb_tex.texture = _get_type_icon(String(def["type"]))
+		orb.add_theme_stylebox_override("panel", _flat(Color("#16222f"), type_color.darkened(0.25), 26))
 		name_l.text = String(def["name"])
 		cost_l.text = "%d费 · %s" % [cost, ZONE_NAMES[String(def["zone"][0])]]
 		action_l.text = action_line
@@ -1565,8 +1578,6 @@ func _refresh() -> void:
 		cost_l.add_theme_font_size_override("font_size", 13)
 		action_l.add_theme_font_size_override("font_size", 13)
 		pips_l.add_theme_font_size_override("font_size", 13)
-		var orb_mat := _flat(type_color if afford else Color("#3a4756"), type_color.darkened(0.3), 22)
-		orb.add_theme_stylebox_override("panel", orb_mat)
 		var bg := Color("#1c2c40") if afford else Color("#131d2b")
 		if selected:
 			bg = bg.lightened(0.10)
