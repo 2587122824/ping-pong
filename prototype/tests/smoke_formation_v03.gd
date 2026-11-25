@@ -134,6 +134,22 @@ func _run() -> void:
 	assert(battle.bomb_pos < 1.0, "反手反拉 pushes back part of the fast shot: %.2f" % battle.bomb_pos)
 	assert(int(counter_unit.actions) == 1, "borrowing spends one counter action")
 
+	# 转不转发球：来方本路首次进攻吃转，被反推且只触发一次
+	battle.restart()
+	battle.level_id = "CH0-B01"
+	_clear(battle)
+	battle._spawn("tt_serve", "player", 1, 5, false)
+	var serve = battle.board["player"][1][5]
+	battle._spawn("tt_main", "enemy", 1, 0, false)
+	var foe = battle.board["enemy"][1][0]
+	battle.bomb_pos = 0.0
+	battle.start_battle()
+	battle._press(foe, serve)
+	assert(serve.has("reversed"), "serve marks reversed after the first incoming attack")
+	var bomb_after: float = battle.bomb_pos
+	battle._press(foe, serve)
+	assert(serve.has("reversed") and battle.bomb_pos <= bomb_after, "reverse only triggers once")
+
 	# 小孩哥童子功：敌方快攻多一次出手
 	assert(battle.card_actions("tt_sub", "enemy") == 4, "kid fast cards get one extra action")
 

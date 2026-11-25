@@ -121,3 +121,4 @@
 - 2026-11-25 招式图标资产落地：`prototype/assets/icons/` 下四类型 256×256 透明 PNG——`icon_fast`（橙拍快攻）、`icon_spin`（粉色上旋球）、`icon_control`（绿色短摆球）、`icon_counter`（蓝拍反拉）。手牌 orb 与 3D 单位瓷砖均按卡牌类型取图；3D 单位由圆球改为 `Sprite3D`（billboard 朝向相机）。图标经 `Image.load` + `ImageTexture.create_from_image` 载入（绕开 headless 未导入 PNG 的资源加载器），`_get_type_icon` 带缓存。
 - 2026-11-25 炸弹引爆重生节奏：新增 `BOMB_RESPAWN=3.0` 秒冷却与 `bomb_cooldown` 状态。引爆后炸弹回中线、隐藏离场，冷却期内 `_push` 不作用于炸弹、定时暂停；倒计时结束放下一颗新炸弹并重置 `bomb_timer=BOMB_TIMER`，双方重新推球。
 - 2026-11-25 补齐设计遗留三项机制：① 跨路支援（本路空 → 索敌相邻路）；② 主动换阵覆盖返还 25% 旧卡费用体力（`SWAP_REFUND`，仅玩家）；③ 炸弹冲击波震掉受击方近台进攻单位 1 次出手（`SHOCKWAVE_DRAIN`，控台单位免疫）。另在台面上加两条车道分隔凹槽。冒烟测试补跨路索敌 / 返还 / 冲击波三条断言；`balance_v03` 自动代理基线见 §4。
+- 2026-11-25 代码审查修复：① `tt_serve` 转不转发球的「吃转反推」原先只打日志、未实际生效，现改为来方首次进攻本路时被发球方反推一半力度，且只触发一次（`_lane_reverse_serve`）；② 敌方生命条初始上限原硬编码 150，改为按当前关卡血量初始化；③ 清理未被读取的死状态变量（`player_timer`/`enemy_timer`/`panel_metas`/`deployed`）；`damage_in/damage_out` 保留供调试探针读取。

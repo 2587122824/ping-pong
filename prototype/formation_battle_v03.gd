@@ -166,11 +166,8 @@ var discard: Array = []
 var selected_card := -1
 var log_lines: Array = []
 var feedback := ""
-var deployed := {"player": 0, "enemy": 0}
 var exits := {"player": 0, "enemy": 0}
 
-var player_timer := 0.0
-var enemy_timer := 0.0
 var enemy_deploy_timer := ENEMY_DEPLOY_INTERVAL
 var stamina_timer := 0.0
 
@@ -192,7 +189,6 @@ var board_container: SubViewportContainer
 var table_mesh: MeshInstance3D
 var panels := {"player": [], "enemy": []}
 var panel_mats := {"player": [], "enemy": []}
-var panel_metas := {"player": [], "enemy": []}
 var tokens := {"player": [], "enemy": []}
 var bomb_node: MeshInstance3D
 var bomb_material: StandardMaterial3D
@@ -247,10 +243,7 @@ func restart() -> void:
 	damage_in = 0
 	damage_out = 0
 	log_lines.clear()
-	deployed = {"player": 0, "enemy": 0}
 	exits = {"player": 0, "enemy": 0}
-	player_timer = 0.0
-	enemy_timer = 0.0
 	stamina_timer = 0.0
 	enemy_deploy_timer = ENEMY_DEPLOY_INTERVAL
 	board = {}
@@ -374,7 +367,6 @@ func _spawn(card_id: String, side: String, lane: int, row: int, pay := true) -> 
 			player_stamina = mini(STAMINA_MAX, player_stamina + refund)
 			_log("换阵覆盖：%s 退场，返还 %d 点体力" % [String(old.name), refund])
 	board[side][lane][row] = unit
-	deployed[side] = int(deployed[side]) + 1
 	var entry_push := float(CARDS[card_id].get("entry_push", 0.0))
 	if entry_push > 0.0 and phase == "battle":
 		_push(side, lane, entry_push, unit)
@@ -707,6 +699,14 @@ func _press(unit, target) -> void:
 			push -= back
 			_push("enemy", lane, back)
 			_log("%s 卸力反推 %.1f 格" % [guardian.name, back])
+	# 转不转发球：来方本路第一次进攻吃转，被发球方反推一半力度
+	var defender_side := "enemy" if unit.side == "player" else "player"
+	var serve = _lane_reverse_serve(defender_side, lane)
+	if serve != null:
+		serve["reversed"] = true
+		var back := push * 0.5
+		_push(defender_side, lane, back)
+		_log("%s 吃转：反推 %.1f 格" % [String(serve.name), back])
 	_push(unit.side, lane, push)
 	# 扣杀：炸弹已在敌方半场时直接推到底线引爆
 	if bool(CARDS[unit.card].get("smash_detonate", false)):
@@ -716,10 +716,14 @@ func _press(unit, target) -> void:
 		elif unit.side == "enemy" and bomb_pos < -0.5:
 			bomb_pos = -BOMB_RANGE
 			_check_bomb()
-	# 转不转发球：敌方本路第一次进攻被吃转
-	if bool(CARDS[unit.card].get("reverse_first", false)) and not unit.has("reversed"):
-		unit["reversed"] = true
-		_log("%s 吃转：本路下一次来球会被反推" % unit.name)
+
+
+func _lane_reverse_serve(side: String, lane: int):
+	for row in range(ROWS):
+		var u = board[side][lane][row]
+		if u != null and u.alive and bool(CARDS[u.card].get("reverse_first", false)) and not u.has("reversed"):
+			return u
+	return null
 
 
 func _lane_has_forehand(unit) -> bool:
@@ -1031,7 +1035,6 @@ func _build_world() -> void:
 	for side in ["player", "enemy"]:
 		panels[side] = []
 		panel_mats[side] = []
-		panel_metas[side] = []
 		tokens[side] = []
 		for lane in range(LANES):
 			var lane_panels: Array = []
@@ -1442,7 +1445,7 @@ func _build_ui() -> void:
 	enemy_hp_label = Label.new()
 	enemy_hp_label.custom_minimum_size = Vector2(150, 22)
 	status.add_child(enemy_hp_label)
-	enemy_hp_bar = _make_bar(150, Color("#f87171"))
+	enemy_hp_bar = _make_bar(int(LEVELS[level_id]["hp"]), Color("#f87171"))
 	status.add_child(enemy_hp_bar)
 	var st_spacer := Control.new()
 	st_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
