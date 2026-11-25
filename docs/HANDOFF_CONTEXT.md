@@ -6,7 +6,7 @@
 
 项目处于概念设计与玩法原型验证阶段。Godot 4.7.2 Standard 已安装；`prototype/` 包含第三人称移动、对话/商人/牌战 NPC、背包交易、图鉴与双向即时传送，以及体力费用制回合战斗（保留作回归对照）。
 
-**当前布阵主线为 V0.3 实时布阵自动战斗**（`formation_battle_v03.tscn`，F2 或「阵战原型」按钮打开）；旧 V0.2 HP 单位体系及其探针/测试已删除。V0.3 已落地：3×7 站桩阵型、13 张乒乓球招式牌、四类克制与克制压制、单颗共享炸弹（定时/推底引爆 + 重生冷却 + 倒计时反馈）、跨路支援、换阵返还、炸弹冲击波、两个街头 BOSS。机制细节、平衡基线与待验证项见产品方向文档 §12 与设计文档 §8。
+**当前布阵主线为 V0.3 实时布阵自动战斗**（`formation_battle_v03.tscn`，F2 或「阵战原型」按钮打开）；旧 V0.2 HP 单位体系及其探针/测试已删除。V0.3 已落地：3×7 站桩阵型、13 张乒乓球招式牌、四类克制（定稿倍率表）与克制压制（非控台削次、控台扣时长）、单颗共享炸弹（定时/推底引爆 + 重生冷却 + 倒计时反馈）、跨路支援与 debuff 跟随、三种同路连携（调动起板/双拍连击/防守反击链）、换阵变招抢攻、炸弹冲击波、两个街头 BOSS；三阶段节奏（0–10s 稳阵 / 10–50s 拉扯 / 50–90s 高压）。机制细节、平衡基线与待验证项见产品方向文档 §12 与设计定稿 `FORMATION_BATTLE_V0_3_DESIGN.md`。
 
 仓库当前主要用于沉淀《拿拍》的产品方向和设计决策。
 
@@ -24,7 +24,7 @@
 完整记录见：
 
 - `docs/PRODUCT_DIRECTION.md`
-- 实时布阵自动战斗 V0.3（当前主线）：设计原文 `docs/FORMATION_BATTLE_V0_3.md`；产品方向汇总见 `docs/PRODUCT_DIRECTION.md` §12
+- 实时布阵自动战斗 V0.3（当前主线）：设计定稿 `docs/FORMATION_BATTLE_V0_3_DESIGN.md`；落地对照 `docs/FORMATION_BATTLE_V0_3.md`；产品方向汇总见 `docs/PRODUCT_DIRECTION.md` §12
 - `docs/DECISION_LOG.md`
 - `docs/FUTURE_WORLD_SIMULATION_V0_1.md`
 
@@ -50,15 +50,15 @@
 
 ## 运行状态
 
-本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描；回归脚本见 `prototype/tests/`：牌战线 `smoke_battle / smoke_collection / smoke_equipment / smoke_gate / smoke_inventory / smoke_skills / smoke_trade`；布阵 V0.3 线 `smoke_formation_v03`（去血单位/炸弹推拉/克制压制/BOSS 能力/生命结算）、`balance_v03`（两 BOSS 平衡基线）、`debug_v03`（单局轨迹）、`smoke_hud`（布阵原型打开/关闭时探索常驻 HUD 收起与恢复）、`smoke_highlight`（选牌后可放置槽位三态高亮与取消选中）、`probe_input_v03`（手牌 meta 回溯 + 槽位射线往返）、`probe_deploy_slot`（部署入口落盘断言）、`probe_gameplay_v03`（在场密度/断档/体力水位时序采样）。旧 V0.2 布阵冒烟与探针已随原型删除；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
+本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描；回归脚本见 `prototype/tests/`：牌战线 `smoke_battle / smoke_collection / smoke_equipment / smoke_gate / smoke_inventory / smoke_skills / smoke_trade`；布阵 V0.3 线 `smoke_formation_v03`（去血单位/炸弹推拉/克制压制/BOSS 能力/生命结算）、`balance_v03`（两 BOSS 平衡基线）、`debug_v03`（单局轨迹）、`smoke_hud`（布阵原型打开/关闭时探索常驻 HUD 收起与恢复）、`smoke_highlight`（选牌后可放置槽位三态高亮与取消选中）、`probe_input_v03`（手牌 meta 回溯 + 槽位射线往返）、`probe_deploy_slot`（部署入口落盘断言）、`probe_gameplay_v03`（在场密度/断档/体力水位时序采样）、`probe_rules_v03`（控台扣时长/三种连携/跨路跟随/三阶段定时专项）。旧 V0.2 布阵冒烟与探针已随原型删除；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
 
 ## 下一步
 
-**布阵 V0.3（候选主线）**：先真人试玩 `formation_battle_v03.tscn`，确认三件事：一是单颗共享炸弹的视觉焦点与倒计时压迫感是否清晰；二是开局 100 体力铺 4–5 张、前 20 秒互克/引爆节奏是否成立；三是小孩哥快攻 swarm 与大爷卸力反制的破解意图是否读得出来。当前代理基线场上密度偏低（我方约 9–10%、敌方约 3% 在场）、体力长期见底，属经济数值，**真人对局前不动 BOSS 生命/补位/回复旋钮**，不要按探针数字压 BOSS。
+**布阵 V0.3（候选主线）**：先真人试玩 `formation_battle_v03.tscn`，确认三件事：一是单颗共享炸弹的视觉焦点与倒计时压迫感是否清晰；二是开局 100 体力铺 4–5 张、前 20 秒互克/引爆节奏是否成立；三是小孩哥快攻 swarm 与大爷卸力反制的破解意图是否读得出来。当前代理基线场上密度仍偏低（我方约 10–13%、敌方约 4% 在场），属经济数值，**真人对局前不动 BOSS 生命/补位/回复旋钮**，不要按探针数字压 BOSS。
 
-已实现：跨路空路支援、换阵返还 25% 体力、炸弹冲击波削前排出手、克制压制削次数/逼退、炸弹倒计时（头顶秒数 + HUD 读数 + 临爆变色脉冲）。
+已实现：跨路空路支援与 debuff 跟随、换阵返还 25% 体力、换阵变招抢攻、炸弹冲击波削前排出手、克制压制削次/控台扣时长、炸弹倒计时（头顶秒数 + HUD 读数 + 临爆变色脉冲）、三种同路连携、落子回弹与触发跳字、主导路提亮。
 
-待排期遗留：① 控台 debuff 只扫本路，跨路索敌后不跟随目标所在路；② 控台/发球持续时间在炸弹重生冷却期照常流逝；③ 克制表方向与设计 §4.1 有出入待校准；④ 空位率 40%–60% 尚无专项统计。旧 V0.2 HP 单位体系及其探针/测试已删除。
+待排期遗留：① 炸弹滑行能量尾焰、连携虚线光弧、击球/临爆音效未接入；② 在场密度低于 30%–50% 目标，待真人对局统计后再做经济校准；③ 单位/手牌正式 sprite 或 GLB 与 BOSS 徽章、光束体积感待打磨。旧 V0.2 HP 单位体系及其探针/测试已删除。
 
 **回合制牌战**：保留在 `main.gd` 作回归对照，暂无优先打磨计划；后续若重启该方向，再同步关卡与牌面口径。
 

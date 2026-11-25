@@ -13,10 +13,11 @@ const ROWS := 7
 const STAMINA_MAX := 100
 const START_STAMINA := 100
 const REGEN_INTERVAL := 1.0
-const REGEN_AMOUNT := 5
+const REGEN_AMOUNT := 6
 const ENEMY_REGEN_AMOUNT := 1
 const HAND_SIZE := 5
 const BOMB_TIMER := 7.0
+const BOMB_TIMER_HIGH := 5.5
 const BOMB_RANGE := 7.0
 const BOMB_DAMAGE := 15
 const BOMB_RESPAWN := 3.0
@@ -24,23 +25,28 @@ const BASELINE_DAMAGE := 22
 const PLAYER_MAX_HP := 100
 const BATTLE_LIMIT := 90.0
 const ENEMY_DEPLOY_INTERVAL := 2.4
+# 终盘高压期（50s 后）：回复小幅提升、炸弹定时加快
+const HIGH_PRESSURE_TIME := 50.0
+const REGEN_AMOUNT_HIGH := 7
+const ENEMY_REGEN_HIGH := 2
 # 主动换阵覆盖：返还被替换单位费用的比例
 const SWAP_REFUND := 0.25
 # 炸弹冲击波：震掉受击方前排（近台）单位的出手次数
 const SHOCKWAVE_DRAIN := 1
-# 克制压制：明显克制（倍率 ≥ 阈值）命中时削守方出手次数；控台单位不吃直接压制
+# 克制压制：明显克制（倍率 ≥ 阈值）命中时削守方出手次数；控台改为缩短持续时间
 const COUNTER_SUPPRESS_MULT := 1.3
 const COUNTER_SUPPRESS_DRAIN := 1
+const CONTROL_SUPPRESS_DURATION := 1.5
 
 const ZONE_ROWS := {"near": [0, 1], "mid": [2, 3, 4], "far": [5, 6]}
 const ZONE_NAMES := {"near": "近台", "mid": "中台", "far": "远台"}
 
-# 攻方类型 → 守方类型的推力倍率（1.5 = 明显克制，0.5 = 被反制）
+# 攻方类型 → 守方类型的推力倍率（>1 = 克制，<1 = 被反制）；按 §4.1 直觉闭环校准
 const COUNTER := {
-	"fast": {"fast": 1.0, "spin": 1.5, "control": 0.9, "counter": 0.6},
-	"spin": {"fast": 1.3, "spin": 1.0, "control": 0.7, "counter": 0.5},
-	"control": {"fast": 1.0, "spin": 0.9, "control": 1.0, "counter": 0.9},
-	"counter": {"fast": 0.8, "spin": 1.4, "control": 1.0, "counter": 1.0}
+	"fast": {"fast": 1.0, "spin": 0.7, "control": 1.3, "counter": 0.7},
+	"spin": {"fast": 1.4, "spin": 1.0, "control": 0.7, "counter": 0.6},
+	"control": {"fast": 0.8, "spin": 1.4, "control": 1.0, "counter": 0.9},
+	"counter": {"fast": 1.2, "spin": 1.4, "control": 1.1, "counter": 1.0}
 }
 
 const CARDS := {
@@ -61,19 +67,19 @@ const CARDS := {
 	},
 	"tt_short": {
 		"name": "摆短", "type": "control", "cost": 15, "zone": ["near"],
-		"duration": 8.0, "interval": 1.0,
+		"duration": 9.0, "interval": 1.0,
 		"debuff": {"type": "spin", "ratio": 0.5, "interval_mult": 1.5},
-		"desc": "压制敌方弧圈类推力减半、出手变慢，持续 8 秒。"
+		"desc": "压制敌方弧圈类推力减半、出手变慢，持续 9 秒。"
 	},
 	"tt_long": {
 		"name": "劈长", "type": "control", "cost": 15, "zone": ["far"],
-		"duration": 8.0, "interval": 1.0,
+		"duration": 9.0, "interval": 1.0,
 		"debuff": {"type": "fast", "ratio": 0.6, "interval_mult": 1.3},
-		"desc": "限制敌方近台快攻推力，并拖慢其出手节奏，持续 8 秒。"
+		"desc": "限制敌方近台快攻推力，并拖慢其出手节奏，持续 9 秒。"
 	},
 	"tt_serve": {
 		"name": "转不转发球", "type": "control", "cost": 15, "zone": ["far"],
-		"duration": 8.0, "interval": 1.0, "resource": 3, "resource_interval": 3.0,
+		"duration": 9.0, "interval": 1.0, "resource": 3, "resource_interval": 3.0,
 		"reverse_first": true,
 		"desc": "每 3 秒 +3 体力；敌方本路第一次进攻会被吃转反推。"
 	},
@@ -94,12 +100,12 @@ const CARDS := {
 	},
 	"tt_defense": {
 		"name": "正手反拉", "type": "counter", "cost": 25, "zone": ["mid"],
-		"actions": 2, "interval": 1.0, "push": 1.3, "reflect": ["spin"],
+		"actions": 3, "interval": 1.0, "push": 1.3, "reflect": ["spin"],
 		"desc": "专克罗圈与扣杀：借力把敌方推力加倍反推。"
 	},
 	"tt_backhand_counter": {
 		"name": "反手反拉", "type": "counter", "cost": 25, "zone": ["mid"],
-		"actions": 2, "interval": 1.0, "push": 1.1, "reflect": ["fast"],
+		"actions": 3, "interval": 1.0, "push": 1.1, "reflect": ["fast"],
 		"desc": "专克快攻与侧翼来球，反推并小幅支援相邻路。"
 	},
 	"tt_smash": {
@@ -162,6 +168,7 @@ var boom_time := 0.0
 var bomb_cooldown := 0.0
 # 炸弹视觉位置（缓动用，避免每次推力直接瞬移）
 var bomb_vis_x := 0.0
+var bomb_vis_z := 0.0
 
 var hand: Array = []
 var draw_pile: Array = []
@@ -173,6 +180,10 @@ var exits := {"player": 0, "enemy": 0}
 
 var enemy_deploy_timer := ENEMY_DEPLOY_INTERVAL
 var stamina_timer := 0.0
+# 各路近期推力权重（用于主导路权高亮与炸弹倾向）
+var lane_push := [0.0, 0.0, 0.0]
+# 战场浮动跳字 {node, life}
+var floaters: Array = []
 
 const TYPE_COLORS := {
 	"fast": Color("#fb923c"),
@@ -251,6 +262,11 @@ func restart() -> void:
 	exits = {"player": 0, "enemy": 0}
 	stamina_timer = 0.0
 	enemy_deploy_timer = ENEMY_DEPLOY_INTERVAL
+	lane_push = [0.0, 0.0, 0.0]
+	for f in floaters:
+		if f.get("node") != null and is_instance_valid(f["node"]):
+			f["node"].queue_free()
+	floaters.clear()
 	board = {}
 	for side in ["player", "enemy"]:
 		var lanes: Array = []
@@ -261,11 +277,12 @@ func restart() -> void:
 			lanes.append(rows)
 		board[side] = lanes
 	bomb_pos = 0.0
-	bomb_timer = BOMB_TIMER
+	bomb_timer = _bomb_timer_target()
 	bomb_lane = 1
 	boom_time = 0.0
 	bomb_cooldown = 0.0
 	bomb_vis_x = 0.0
+	bomb_vis_z = 0.0
 	hand = []
 	draw_pile = []
 	discard = []
@@ -375,6 +392,12 @@ func _spawn(card_id: String, side: String, lane: int, row: int, pay := true) -> 
 	var entry_push := float(CARDS[card_id].get("entry_push", 0.0))
 	if entry_push > 0.0 and phase == "battle":
 		_push(side, lane, entry_push, unit)
+	# 换阵变招抢攻：反击/破防类招式换阵入场瞬间额外触发一次小幅推力
+	if old != null and unit.type == "counter" and phase == "battle":
+		_push(side, lane, 0.6, unit)
+		_log("换阵变招：%s 入场抢攻" % unit.name)
+	# 落子弹性缩放回弹
+	unit["pop"] = 0.12
 	_log("%s %s → %s·%s" % ["我方" if side == "player" else "敌方", unit.name, ["上", "中", "下"][lane], ZONE_NAMES[zone_of_row(row)]])
 	return true
 
@@ -513,9 +536,14 @@ func start_battle() -> void:
 		return
 	phase = "battle"
 	battle_time = 0.0
-	bomb_timer = BOMB_TIMER
+	bomb_timer = _bomb_timer_target()
 	_log("开战：双方招式推动全场主炸弹")
 	_refresh()
+
+
+# 终盘高压期炸弹定时加快
+func _bomb_timer_target() -> float:
+	return BOMB_TIMER_HIGH if battle_time >= HIGH_PRESSURE_TIME else BOMB_TIMER
 
 
 func tick(delta: float) -> void:
@@ -534,14 +562,45 @@ func _process(delta: float) -> void:
 		tick(delta)
 	_tick_boom(delta)
 	_update_bomb_visual(delta)
+	_update_floaters(delta)
+	_update_pop(delta)
+
+
+func _update_pop(delta: float) -> void:
+	for side in ["player", "enemy"]:
+		if tokens[side].is_empty():
+			continue
+		for lane in range(LANES):
+			for row in range(ROWS):
+				var unit = board[side][lane][row]
+				if unit == null or not unit.alive:
+					continue
+				if not unit.has("pop"):
+					continue
+				var pop: float = float(unit.pop) - delta
+				unit["pop"] = maxf(0.0, pop)
+				var token = tokens[side][lane][row]
+				if token == null:
+					continue
+				var depth_scale := 1.0 - row * 0.03
+				var s := 1.0
+				if pop > 0.0:
+					var t: float = 1.0 - pop / 0.12
+					if t < 0.5:
+						s = lerpf(1.35, 0.95, t / 0.5)
+					else:
+						s = lerpf(0.95, 1.0, (t - 0.5) / 0.5)
+				token.scale = Vector3(0.42 * depth_scale * s, 0.42 * depth_scale * s, 0.42 * depth_scale * s)
 
 
 func _update_bomb_visual(delta: float) -> void:
 	var target_x := bomb_pos / BOMB_RANGE * 7.15
 	bomb_vis_x = move_toward(bomb_vis_x, target_x, delta * 10.0)
+	var target_z: float = LANE_Z[_dominant_lane()]
+	bomb_vis_z = move_toward(bomb_vis_z, target_z, delta * 4.0)
 	if bomb_node != null:
 		bomb_node.visible = bomb_cooldown <= 0.0
-		bomb_node.position = Vector3(bomb_vis_x, 0.42, LANE_Z[bomb_lane])
+		bomb_node.position = Vector3(bomb_vis_x, 0.42, bomb_vis_z)
 	_update_bomb_countdown()
 
 
@@ -578,15 +637,22 @@ func _step(delta: float) -> void:
 	stamina_timer += delta
 	if stamina_timer >= REGEN_INTERVAL:
 		stamina_timer -= REGEN_INTERVAL
-		player_stamina = mini(STAMINA_MAX, player_stamina + REGEN_AMOUNT)
-		enemy_stamina = mini(STAMINA_MAX, enemy_stamina + ENEMY_REGEN_AMOUNT)
+		# 终盘高压期：双方回复小幅提升
+		var regen_p := REGEN_AMOUNT_HIGH if battle_time >= HIGH_PRESSURE_TIME else REGEN_AMOUNT
+		var regen_e := ENEMY_REGEN_HIGH if battle_time >= HIGH_PRESSURE_TIME else ENEMY_REGEN_AMOUNT
+		player_stamina = mini(STAMINA_MAX, player_stamina + regen_p)
+		enemy_stamina = mini(STAMINA_MAX, enemy_stamina + regen_e)
+
+	# 路权推力权重随时间回落，避免历史推力长期主导高亮
+	for i in range(LANES):
+		lane_push[i] = move_toward(lane_push[i], 0.0, delta * 0.6)
 
 	# 炸弹冷却与计时：引爆后隔几秒放下一颗新炸弹，期间不推球
 	if bomb_cooldown > 0.0:
 		bomb_cooldown -= delta
 		if bomb_cooldown <= 0.0:
 			bomb_cooldown = 0.0
-			bomb_timer = BOMB_TIMER
+			bomb_timer = _bomb_timer_target()
 			_log("新炸弹放到中线，双方重新推球")
 	else:
 		bomb_timer = bomb_timer - delta
@@ -616,7 +682,9 @@ func _step(delta: float) -> void:
 
 func _advance_unit(unit, delta: float) -> void:
 	if unit.type == "control":
-		unit.duration = float(unit.duration) - delta
+		# 炸弹重生冷却期暂停阵地单位持续时间流逝（设计 §3.1）
+		if bomb_cooldown <= 0.0:
+			unit.duration = float(unit.duration) - delta
 		_control_tick(unit, delta)
 		if unit.duration <= 0.0:
 			_exit(unit, "持续时间结束")
@@ -631,7 +699,11 @@ func _advance_unit(unit, delta: float) -> void:
 		_exit(unit, "出手次数耗尽")
 		return
 	var interval := float(unit.interval)
-	interval *= _interval_mult(unit)
+	var tlane := int(target.lane) if target != null else int(unit.lane)
+	interval *= _interval_mult(unit, tlane)
+	# 【双拍连击】同路同时存在正手与反手招式：双方出手间隔 -10%
+	if _lane_has_forehand(unit.side, int(unit.lane)) and _lane_has_backhand(unit.side, int(unit.lane)):
+		interval *= 0.9
 	unit.cooldown = interval
 
 
@@ -675,10 +747,10 @@ func _lane_target(side: String, lane: int):
 	return null
 
 
-func _interval_mult(unit) -> float:
+func _interval_mult(unit, target_lane := -1) -> float:
 	var mult := 1.0
 	var enemy_side := "enemy" if unit.side == "player" else "player"
-	var lane := int(unit.lane)
+	var lane := target_lane if target_lane >= 0 else int(unit.lane)
 	for row in range(ROWS):
 		var other = board[enemy_side][lane][row]
 		if other == null or not other.alive or other.type != "control":
@@ -702,6 +774,7 @@ func _push(side: String, lane: int, amount: float, unit = null) -> void:
 		return
 	var sign_dir := 1.0 if side == "player" else -1.0
 	bomb_pos = bomb_pos + amount * sign_dir
+	lane_push[lane] += amount * sign_dir
 	_check_bomb()
 
 
@@ -709,25 +782,40 @@ func _press(unit, target) -> void:
 	var lane := int(unit.lane)
 	var push := float(unit.push)
 	# 正手联动：同路有另一个正手招式
-	if float(CARDS[unit.card].get("forehand_synergy", 0.0)) > 0.0 and _lane_has_forehand(unit):
+	if float(CARDS[unit.card].get("forehand_synergy", 0.0)) > 0.0 and _lane_has_forehand(unit.side, lane, unit):
 		push += float(CARDS[unit.card]["forehand_synergy"])
 	# 克制倍率
 	var mult := 1.0
+	var tlane := lane
 	if target != null:
+		tlane = int(target.lane)
 		var table: Dictionary = COUNTER[unit.type]
 		mult = float(table.get(String(target.type), 1.0))
 		if mult > 1.0:
 			_log("%s 克制 %s（推力 x%.1f）" % [unit.name, target.name, mult])
-		# 克制压制（设计 §4.2-3）：明显克制命中时打断守方、削出手次数；
-		# 自带 drain 的卡（快撕/加转弧圈）走同一套削次数，不叠加；控台单位免疫直接压制
-		if target.type != "control" and mult >= COUNTER_SUPPRESS_MULT and int(target.actions) > 0:
-			target.actions = int(target.actions) - COUNTER_SUPPRESS_DRAIN
-			_log("%s 克制压制 %s，削 %d 次出手" % [unit.name, target.name, COUNTER_SUPPRESS_DRAIN])
-			if int(target.actions) <= 0:
-				_exit(target, "被克制招式逼退")
+		# 克制压制（设计 §4.1）：明显克制命中时——非控台削出手次数；
+		# 控台不再免疫，改为缩短 1.5s 持续时间
+		if mult >= COUNTER_SUPPRESS_MULT:
+			if target.type == "control":
+				target.duration = float(target.duration) - CONTROL_SUPPRESS_DURATION
+				_log("%s 压制 %s，持续 -%.1fs" % [unit.name, target.name, CONTROL_SUPPRESS_DURATION])
+				_spawn_floater(_unit_world(target), "压制!", "#ffd166")
+				if target.duration <= 0.0:
+					_exit(target, "被克制招式逼退")
+			elif int(target.actions) > 0:
+				target.actions = int(target.actions) - COUNTER_SUPPRESS_DRAIN
+				_log("%s 克制压制 %s，削 %d 次出手" % [unit.name, target.name, COUNTER_SUPPRESS_DRAIN])
+				_spawn_floater(_unit_world(target), "压制!", "#ffd166")
+				if int(target.actions) <= 0:
+					_exit(target, "被克制招式逼退")
 	push *= mult
-	# 控台压制
-	push *= _debuff_ratio(unit)
+	# 【调动起板】同路有己方控台 + 弧圈/重击：重击推力 +25%
+	if bool(CARDS[unit.card].get("heavy", false)) and _lane_has_control(unit.side, lane):
+		push *= 1.25
+		_log("调动起板：%s 重击推力 +25%%" % unit.name)
+		_spawn_floater(_unit_world(unit), "调动起板", "#4cc9f0")
+	# 控台压制（debuff 跟随目标所在路，跨路支援不落空）
+	push *= _debuff_ratio(unit, tlane)
 	# 敌方反拉类借力反推
 	_reflect(unit, target, push)
 	# 大爷的极致球感：正面硬砸弧圈/扣杀会被卸力反推
@@ -765,21 +853,40 @@ func _lane_reverse_serve(side: String, lane: int):
 	return null
 
 
-func _lane_has_forehand(unit) -> bool:
+func _lane_has_forehand(side: String, lane: int, exclude = null) -> bool:
 	for row in range(ROWS):
-		var other = board[unit.side][int(unit.lane)][row]
-		if other == null or not other.alive or other == unit:
+		var other = board[side][lane][row]
+		if other == null or not other.alive or other == exclude:
 			continue
 		if String(CARDS[other.card]["name"]).begins_with("正手"):
 			return true
 	return false
 
 
-func _debuff_ratio(unit) -> float:
+func _lane_has_backhand(side: String, lane: int, exclude = null) -> bool:
+	for row in range(ROWS):
+		var other = board[side][lane][row]
+		if other == null or not other.alive or other == exclude:
+			continue
+		if String(CARDS[other.card]["name"]).begins_with("反手"):
+			return true
+	return false
+
+
+func _lane_has_control(side: String, lane: int) -> bool:
+	for row in range(ROWS):
+		var other = board[side][lane][row]
+		if other != null and other.alive and other.type == "control":
+			return true
+	return false
+
+
+func _debuff_ratio(unit, target_lane := -1) -> float:
 	var ratio := 1.0
 	var enemy_side := "enemy" if unit.side == "player" else "player"
+	var lane := target_lane if target_lane >= 0 else int(unit.lane)
 	for row in range(ROWS):
-		var other = board[enemy_side][int(unit.lane)][row]
+		var other = board[enemy_side][lane][row]
 		if other == null or not other.alive or other.type != "control":
 			continue
 		if bool(CARDS[unit.card].get("ignore_control", false)):
@@ -805,12 +912,25 @@ func _reflect(unit, target, push: float) -> float:
 	if int(target.actions) <= 0:
 		return 0.0
 	var back := push * float(target.push) * 0.5
+	# 【防守反击链】近台有牵制/快带、中台驻守反拉：反推力 +20%
+	if _lane_has_near_pressure(target.side, int(target.lane)):
+		back *= 1.20
+		_log("防守反击链：%s 反推力 +20%%" % target.name)
+		_spawn_floater(_unit_world(target), "反击链", "#ff8fa3")
 	_push(target.side, int(unit.lane), back)
 	target.actions = int(target.actions) - 1
 	_log("%s 借力反推 %.1f 格" % [target.name, back])
 	if int(target.actions) <= 0:
 		_exit(target, "反制次数耗尽")
 	return back
+
+
+func _lane_has_near_pressure(side: String, lane: int) -> bool:
+	for row in ZONE_ROWS["near"]:
+		var other = board[side][lane][row]
+		if other != null and other.alive and (other.type == "fast" or other.type == "control"):
+			return true
+	return false
 
 
 func _first_lane_unit(side: String, lane: int):
@@ -985,6 +1105,54 @@ func _slot_position(side: String, lane: int, row: int) -> Vector3:
 	var sign := -1.0 if side == "player" else 1.0
 	var x := sign * (SLOT_X0 + row * SLOT_X_STEP)
 	return Vector3(x, 0.06, LANE_Z[lane])
+
+
+func _unit_world(unit) -> Vector3:
+	return _slot_position(String(unit.side), int(unit.lane), int(unit.row))
+
+
+# 战场浮动跳字：压制 / 借力反推 / 连携触发等反馈
+func _spawn_floater(world_pos: Vector3, text: String, color_hex: String) -> void:
+	if board_viewport == null:
+		return
+	var label := Label3D.new()
+	label.text = text
+	label.font_size = 34
+	label.pixel_size = 0.014
+	label.outline_size = 10
+	label.outline_modulate = Color("#0b1220")
+	label.modulate = Color(color_hex)
+	label.billboard = 1
+	label.position = world_pos + Vector3(0.0, 0.75, 0.0)
+	board_viewport.add_child(label)
+	floaters.append({"node": label, "life": 1.0})
+
+
+func _update_floaters(delta: float) -> void:
+	for i in range(floaters.size() - 1, -1, -1):
+		var f: Dictionary = floaters[i]
+		f["life"] = float(f["life"]) - delta
+		var label: Label3D = f["node"]
+		if label == null or not is_instance_valid(label):
+			floaters.remove_at(i)
+			continue
+		label.position.y += delta * 0.5
+		var t: float = clampf(float(f["life"]), 0.0, 1.0)
+		label.modulate.a = t
+		if float(f["life"]) <= 0.0:
+			label.queue_free()
+			floaters.remove_at(i)
+
+
+# 净推力主导路：返回 |推力| 最大的路；三路都弱时回退中路
+func _dominant_lane() -> int:
+	var best := 1
+	var best_val := 0.0
+	for i in range(LANES):
+		if absf(lane_push[i]) > best_val:
+			best_val = absf(lane_push[i])
+			best = i
+	return best
 
 
 func _build_world() -> void:
@@ -1437,12 +1605,15 @@ func _sync_board_visuals() -> void:
 	_sync_tokens()
 
 	var card_id := ""
+	var my_type := ""
 	var highlight_idx := selected_card
 	if highlight_idx < 0 and drag_active and drag_card >= 0 and drag_card < hand.size():
 		highlight_idx = drag_card
 	if highlight_idx >= 0 and highlight_idx < hand.size():
 		card_id = String(hand[highlight_idx])
+		my_type = String(CARDS[card_id]["type"])
 
+	var dom_lane := _dominant_lane()
 	for lane in range(LANES):
 		for row in range(ROWS):
 			for side in ["player", "enemy"]:
@@ -1453,17 +1624,33 @@ func _sync_board_visuals() -> void:
 						mat.albedo_color = Color("#0e1622")
 					elif unit != null:
 						mat.albedo_color = Color("#6b5318")
+					elif _lane_counters_enemy(my_type, lane):
+						# 克制优势：该路敌方单位被当前手牌克制 → 金框
+						mat.albedo_color = Color("#8a6d1f")
 					else:
 						mat.albedo_color = Color("#17594a")
 				elif unit != null:
 					mat.albedo_color = _token_color(unit).darkened(0.55)
 				else:
 					mat.albedo_color = _zone_color(zone_of_row(row))
+				# 主导路轨道光带：净推力贡献最大的一路微微提亮
+				mat.emission_enabled = true
+				mat.emission = TYPE_COLORS[String(unit.type)] if unit != null else Color("#1d3550")
+				mat.emission_energy_multiplier = 0.22 if lane == dom_lane else 0.05
 
-	# 炸弹位置：沿 X 轴压到对应半场格子，固定中路；颜色保持金属深色，不随半场切换
+	# 炸弹位置：沿 X 轴压到对应半场，纵向靠向主导路；颜色保持金属深色，不随半场切换
 	var bomb_x := bomb_vis_x
 	if bomb_node != null:
-		bomb_node.position = Vector3(bomb_x, 0.42, LANE_Z[bomb_lane])
+		bomb_node.position = Vector3(bomb_x, 0.42, bomb_vis_z)
+
+
+# 当前手牌类型是否克制该路任一敌方单位（倍率 >1）
+func _lane_counters_enemy(my_type: String, lane: int) -> bool:
+	for row in range(ROWS):
+		var eu = board["enemy"][lane][row]
+		if eu != null and eu.alive and float(COUNTER[my_type].get(String(eu.type), 1.0)) > 1.0:
+			return true
+	return false
 
 
 # ---------------------------------------------------------------- 2D 覆盖层

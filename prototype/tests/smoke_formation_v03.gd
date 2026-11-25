@@ -132,7 +132,7 @@ func _run() -> void:
 	battle.start_battle()
 	battle._press(fast_unit, counter_unit)
 	assert(battle.bomb_pos < 1.0, "反手反拉 pushes back part of the fast shot: %.2f" % battle.bomb_pos)
-	assert(int(counter_unit.actions) == 1, "borrowing spends one counter action")
+	assert(int(counter_unit.actions) == 2, "borrowing spends one counter action")
 
 	# 克制压制：明显克制命中削守方出手次数，耗尽则逼退
 	battle.restart()
