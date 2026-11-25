@@ -1,6 +1,6 @@
 # 实时布阵自动战斗 V0.3 — 实现与平衡基线（候选）
 
-> 最近更新：2026-11-24
+> 最近更新：2026-11-25
 > 设计原文：`docs/FORMATION_BATTLE_V0_3.md`（用户提供的 `v0_3_3_7.md` 副本）。
 > 本文件记录原型落地情况、实测基线与待验证项；**V0.3 尚未确认为正式方向**，旧 V0.2 布阵原型与回合制牌战仍保留在仓库中。
 
@@ -10,9 +10,12 @@
 | :--- | :--- |
 | `prototype/formation_battle_v03.gd` | V0.3 布阵战斗主脚本（Node3D，内含 3D 桌面搭建 + 2D 覆盖层） |
 | `prototype/formation_battle_v03.tscn` | 挂载上述脚本的场景 |
-| `prototype/tests/smoke_formation_v03.gd` | 冒烟断言：13 卡费用、木棍加成、区域限制、炸弹推动/定时/推底引爆、次数退场、控台 debuff、反拉借力、两个 BOSS 能力、生命结算、时间到判定 |
+| `prototype/tests/smoke_formation_v03.gd` | 冒烟断言：13 卡费用、木棍加成、区域限制、炸弹推动/定时/推底引爆、次数退场、控台 debuff、反拉借力、克制压制削次数/逼退、两个 BOSS 能力、生命结算、时间到判定 |
 | `prototype/tests/balance_v03.gd` | 平衡探针：自动布阵 + 战斗中自动补位，两 BOSS 各 8 局，输出胜率/时长/残留血量/在场单位 |
 | `prototype/tests/debug_v03.gd` | 单局状态轨迹调试（每 3 秒 dump 双方血量/体力/在场数/三路炸弹位置与伤害收支） |
+| `prototype/tests/probe_input_v03.gd` | 输入链路探针：手牌 meta 父链回溯命中 + 21 个我方槽位世界坐标→屏幕→射线往返命中 |
+| `prototype/tests/probe_deploy_slot.gd` | 部署入口探针：走与鼠标相同的 `_on_slot` 入口，合法槽位部署落盘、手牌补回 5 张、选中态清空 |
+| `prototype/tests/probe_gameplay_v03.gd` | 玩法时序探针：按时间片统计在场密度、双方皆空断档占比、炸弹推进深度、体力水位，并做克制压制对照 |
 
 运行冒烟：
 
@@ -33,6 +36,8 @@
   - spin 弧圈：克 fast 1.3、control 0.7、counter 0.5；
   - control 控台：克 spin 0.9；
   - counter 反击：克 spin 1.4、fast 0.8。
+- **克制压制（设计 §4.2-3）**：明显克制（倍率 ≥ `COUNTER_SUPPRESS_MULT=1.3`）命中时，守方被削 `COUNTER_SUPPRESS_DRAIN=1` 次出手；次数耗尽即「被克制招式逼退」。控台单位免疫直接压制；自带 `drain` 的快撕/加转弧圈走同一套削次数、不叠加。
+- **炸弹倒计时反馈**：炸弹头顶 `Label3D` 显示向上取整的剩余秒数；顶部 HUD 同步读数（「引爆 Ns / 炸弹重生中 / 布阵阶段」）。临爆变色：>4s 青色、2–4s 琥珀、≤2s 红色，最后 2 秒球体脉冲跳动、自发光随临爆升温转红；重生冷却期倒计时标签隐藏。
 - **武器「木棍」**：玩家 fast 卡费用 -2（最低 5）、fast 出手 +1；其余类型不吃加成。
 - **BOSS 能力**：
   - `kid` 小孩哥（童子功）：敌方 fast 出手 +1、间隔 ×0.95、费用 -3；开局三单位 `tt_sub`(0,0) / `tt_main`(1,0) / `tt_rip`(2,0)。
