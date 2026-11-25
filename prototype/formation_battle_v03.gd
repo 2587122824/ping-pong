@@ -1302,6 +1302,19 @@ func _build_ui() -> void:
 		button.pressed.connect(_on_level.bind(String(id)))
 		level_buttons[id] = button
 		top.add_child(button)
+	# BOSS 能力金色徽章
+	var badge := PanelContainer.new()
+	badge.custom_minimum_size = Vector2(22, 22)
+	var badge_mat := _flat(Color("#b8860b"), Color("#fbbf24"), 11)
+	badge.add_theme_stylebox_override("panel", badge_mat)
+	var badge_dot := Label.new()
+	badge_dot.text = "★"
+	badge_dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	badge_dot.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	badge_dot.add_theme_font_size_override("font_size", 13)
+	badge_dot.add_theme_color_override("font_color", Color("#fff7d6"))
+	badge.add_child(badge_dot)
+	top.add_child(badge)
 	level_label = Label.new()
 	level_label.add_theme_font_size_override("font_size", 15)
 	level_label.add_theme_color_override("font_color", Color("#d9f1ff"))
@@ -1358,12 +1371,36 @@ func _build_ui() -> void:
 	main.add_child(hand_row)
 	hand_bar = hand_row
 	for i in range(HAND_SIZE):
-		var button := Button.new()
-		button.custom_minimum_size = Vector2(236, 104)
-		button.add_theme_font_size_override("font_size", 14)
-		button.set_meta("hand_index", i)
-		hand_buttons.append(button)
-		hand_row.add_child(button)
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(236, 120)
+		card.set_meta("hand_index", i)
+		var vbox := VBoxContainer.new()
+		vbox.alignment = VBoxContainer.ALIGNMENT_CENTER
+		vbox.add_theme_constant_override("separation", 3)
+		card.add_child(vbox)
+		var orb := PanelContainer.new()
+		orb.custom_minimum_size = Vector2(44, 44)
+		orb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		var orb_name := Label.new()
+		orb_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		orb_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		orb.add_child(orb_name)
+		vbox.add_child(orb)
+		var name_l := Label.new()
+		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vbox.add_child(name_l)
+		var cost_l := Label.new()
+		cost_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vbox.add_child(cost_l)
+		var action_l := Label.new()
+		action_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vbox.add_child(action_l)
+		var pips_l := Label.new()
+		pips_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vbox.add_child(pips_l)
+		card.set_meta("refs", {"orb": orb, "orb_name": orb_name, "name": name_l, "cost": cost_l, "action": action_l, "pips": pips_l})
+		hand_buttons.append(card)
+		hand_row.add_child(card)
 
 	drag_label = Label.new()
 	drag_label.add_theme_font_size_override("font_size", 16)
@@ -1376,6 +1413,9 @@ func _build_ui() -> void:
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 10)
 	main.add_child(bottom)
+	var bottom_spacer := Control.new()
+	bottom_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bottom.add_child(bottom_spacer)
 	auto_button = Button.new()
 	auto_button.text = "自动布阵"
 	auto_button.custom_minimum_size = Vector2(150, 46)
@@ -1475,11 +1515,12 @@ func _refresh() -> void:
 	_sync_board_visuals()
 
 	for i in range(hand_buttons.size()):
-		var button: Button = hand_buttons[i]
+		var card: PanelContainer = hand_buttons[i]
+		var refs: Dictionary = card.get_meta("refs")
 		if i >= hand.size():
-			button.text = ""
-			button.disabled = true
+			card.visible = false
 			continue
+		card.visible = true
 		var card_id := String(hand[i])
 		var def: Dictionary = CARDS[card_id]
 		var selected := i == selected_card
@@ -1489,24 +1530,33 @@ func _refresh() -> void:
 		var max_actions := card_actions(card_id, "player")
 		var action_line := "出手 %d 次" % max_actions if max_actions > 0 else "持续 %.0fs" % float(def.get("duration", 0.0))
 		var pips_line := "%d/%d" % [max_actions, max_actions] if max_actions > 0 else "—"
-		button.text = "%s\n%d费 · %s\n%s\n%s" % [
-			String(def["name"]), cost, ZONE_NAMES[String(def["zone"][0])],
-			action_line, pips_line
-		]
-		button.disabled = false
+		var name_l: Label = refs["name"]
+		var cost_l: Label = refs["cost"]
+		var action_l: Label = refs["action"]
+		var pips_l: Label = refs["pips"]
+		var orb: PanelContainer = refs["orb"]
+		name_l.text = String(def["name"])
+		cost_l.text = "%d费 · %s" % [cost, ZONE_NAMES[String(def["zone"][0])]]
+		action_l.text = action_line
+		pips_l.text = pips_line
+		name_l.add_theme_color_override("font_color", Color("#edf7ff") if afford else Color("#697887"))
+		cost_l.add_theme_color_override("font_color", Color("#fbbf24") if afford else Color("#7a6a45"))
+		action_l.add_theme_color_override("font_color", Color("#c9d8e6") if afford else Color("#697887"))
+		pips_l.add_theme_color_override("font_color", Color("#fde68a") if afford else Color("#6b5f43"))
+		name_l.add_theme_font_size_override("font_size", 15)
+		cost_l.add_theme_font_size_override("font_size", 13)
+		action_l.add_theme_font_size_override("font_size", 13)
+		pips_l.add_theme_font_size_override("font_size", 13)
+		var orb_mat := _flat(type_color if afford else Color("#3a4756"), type_color.darkened(0.3), 22)
+		orb.add_theme_stylebox_override("panel", orb_mat)
 		var bg := Color("#1c2c40") if afford else Color("#131d2b")
 		if selected:
 			bg = bg.lightened(0.10)
 		var border := type_color if selected else (type_color.darkened(0.35) if afford else Color("#24313b"))
 		var border_w := 2 if selected else 1
-		var normal := _flat(bg, border, 10)
+		var normal := _flat(bg, border, 12)
 		normal.set_border_width_all(border_w)
-		button.add_theme_stylebox_override("normal", normal)
-		button.add_theme_stylebox_override("hover", _flat(bg.lightened(0.07), border, 10))
-		button.add_theme_stylebox_override("pressed", _flat(bg.darkened(0.08), border, 10))
-		button.add_theme_stylebox_override("disabled", _flat(Color("#111a23"), Color("#24313b"), 10))
-		button.add_theme_color_override("font_color", Color("#edf7ff") if afford else Color("#697887"))
-		button.add_theme_font_size_override("font_size", 14)
+		card.add_theme_stylebox_override("panel", normal)
 	log_label.text = "\n".join(log_lines)
 	if feedback_label != null:
 		feedback_label.text = feedback
