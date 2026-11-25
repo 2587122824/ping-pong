@@ -1271,8 +1271,8 @@ func _sync_tokens() -> void:
 					unit_label.text = String(unit.name) + suffix
 					unit_label.modulate = Color("#f1f8ff")
 				# 扣顶小标识：靠近相机一侧压低棋子高度，远台略小，形成纵深
-				var scale := 1.0 - row * 0.03
-				token.scale = Vector3(scale, scale, scale)
+				var depth_scale := 1.0 - row * 0.03
+				token.scale = Vector3(0.42 * depth_scale, 0.42 * depth_scale, 0.42 * depth_scale)
 
 
 func _sync_board_visuals() -> void:
