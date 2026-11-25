@@ -992,14 +992,14 @@ func _build_world() -> void:
 	frame.position = Vector3(0.0, -0.22, 0.0)
 	world.add_child(frame)
 
-	# 台面（暖橡木）
+	# 台面（淡橡木）
 	table_mesh = MeshInstance3D.new()
 	var table_box := BoxMesh.new()
 	table_box.size = Vector3(15.5, 0.3, 4.6)
 	table_mesh.mesh = table_box
 	var table_mat := StandardMaterial3D.new()
-	table_mat.albedo_color = Color("#a8794a")
-	table_mat.roughness = 0.75
+	table_mat.albedo_color = Color("#b98f5f")
+	table_mat.roughness = 0.8
 	table_mesh.material_override = table_mat
 	table_mesh.position = Vector3(0.0, -0.15, 0.0)
 	world.add_child(table_mesh)
@@ -1025,7 +1025,7 @@ func _build_world() -> void:
 		groove_box.size = Vector3(14.6, 0.02, 0.06)
 		groove.mesh = groove_box
 		var groove_mat := StandardMaterial3D.new()
-		groove_mat.albedo_color = Color("#6b4a28")
+		groove_mat.albedo_color = Color("#1f2d3a")
 		groove_mat.roughness = 0.85
 		groove.material_override = groove_mat
 		groove.position = Vector3(0.0, 0.02, groove_z)
@@ -1163,12 +1163,31 @@ func _build_world() -> void:
 func _zone_color(zone: String) -> Color:
 	match zone:
 		"near":
-			return Color("#bd8c57")
+			return Color("#3a5168")
 		"mid":
-			return Color("#ad7f4d")
+			return Color("#33475c")
 		"far":
-			return Color("#976c3e")
-	return Color("#ad7f4d")
+			return Color("#2c3e50")
+	return Color("#33475c")
+
+
+func _hand_index_of(ctrl: Control) -> int:
+	# 悬停命中通常落到手牌内部的 orb / Label 等最深层子控件；meta 挂在根卡片上，需要沿父链回溯
+	var cur: Node = ctrl
+	while cur != null:
+		if cur.has_meta("hand_index"):
+			return int(cur.get_meta("hand_index"))
+		cur = cur.get_parent()
+	return -1
+
+
+func _is_button(ctrl: Control) -> bool:
+	var cur: Node = ctrl
+	while cur != null:
+		if cur is Button:
+			return true
+		cur = cur.get_parent()
+	return false
 
 
 func _input(event: InputEvent) -> void:
@@ -1190,13 +1209,14 @@ func _input(event: InputEvent) -> void:
 
 func _on_mouse_down(event: InputEventMouseButton) -> void:
 	var hovered := get_viewport().gui_get_hovered_control()
-	if hovered != null and hovered.has_meta("hand_index"):
-		drag_card = int(hovered.get_meta("hand_index"))
+	var hidx := _hand_index_of(hovered)
+	if hidx >= 0:
+		drag_card = hidx
 		drag_start = event.position
 		drag_active = false
 		return
 	# 点在其他可交互按钮上时不穿透； inert 容器/标签不拦截，继续走 3D 槽位射线
-	if hovered != null and hovered is Button:
+	if _is_button(hovered):
 		return
 	var slot := _pick_slot(event.position)
 	if not slot.is_empty():
@@ -1208,7 +1228,7 @@ func _on_mouse_up(event: InputEventMouseButton) -> void:
 		return
 	if drag_active:
 		var hovered_up := get_viewport().gui_get_hovered_control()
-		var over_gui := hovered_up != null and hovered_up is Button and not hovered_up.has_meta("hand_index")
+		var over_gui := _is_button(hovered_up) and _hand_index_of(hovered_up) < 0
 		if not over_gui:
 			var slot := _pick_slot(event.position)
 			if not slot.is_empty() and String(slot["side"]) == "player":
@@ -1378,8 +1398,8 @@ func _build_ui() -> void:
 	add_child(layer)
 	root = Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	# 覆盖层整体不拦截鼠标，点空白处要穿透到 3D 槽位
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# 覆盖层整体不拦截鼠标；PASS 表示根容器自身不吞事件，子控件（手牌/按钮）仍正常接收，点空白可穿透到 3D 槽位
+	root.mouse_filter = Control.MOUSE_FILTER_PASS
 	layer.add_child(root)
 
 	var main := VBoxContainer.new()
@@ -1478,14 +1498,14 @@ func _build_ui() -> void:
 	hand_bar = hand_row
 	for i in range(HAND_SIZE):
 		var card := PanelContainer.new()
-		card.custom_minimum_size = Vector2(236, 120)
+		card.custom_minimum_size = Vector2(236, 124)
 		card.set_meta("hand_index", i)
 		var vbox := VBoxContainer.new()
 		vbox.alignment = VBoxContainer.ALIGNMENT_CENTER
 		vbox.add_theme_constant_override("separation", 3)
 		card.add_child(vbox)
 		var orb := PanelContainer.new()
-		orb.custom_minimum_size = Vector2(52, 52)
+		orb.custom_minimum_size = Vector2(56, 56)
 		orb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		var orb_tex := TextureRect.new()
 		orb_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -1496,16 +1516,22 @@ func _build_ui() -> void:
 		var name_l := Label.new()
 		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vbox.add_child(name_l)
+		var cost_wrap := PanelContainer.new()
+		cost_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		var cost_l := Label.new()
 		cost_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		vbox.add_child(cost_l)
+		cost_wrap.add_child(cost_l)
+		vbox.add_child(cost_wrap)
 		var action_l := Label.new()
 		action_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		vbox.add_child(action_l)
+		var pips_wrap := PanelContainer.new()
+		pips_wrap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		var pips_l := Label.new()
 		pips_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		vbox.add_child(pips_l)
-		card.set_meta("refs", {"orb": orb, "orb_tex": orb_tex, "name": name_l, "cost": cost_l, "action": action_l, "pips": pips_l})
+		pips_wrap.add_child(pips_l)
+		vbox.add_child(pips_wrap)
+		card.set_meta("refs", {"orb": orb, "orb_tex": orb_tex, "name": name_l, "cost": cost_l, "cost_wrap": cost_wrap, "action": action_l, "pips": pips_l, "pips_wrap": pips_wrap})
 		hand_buttons.append(card)
 		hand_row.add_child(card)
 
@@ -1639,24 +1665,30 @@ func _refresh() -> void:
 		var pips_line := "%d/%d" % [max_actions, max_actions] if max_actions > 0 else "—"
 		var name_l: Label = refs["name"]
 		var cost_l: Label = refs["cost"]
+		var cost_wrap: PanelContainer = refs["cost_wrap"]
 		var action_l: Label = refs["action"]
 		var pips_l: Label = refs["pips"]
+		var pips_wrap: PanelContainer = refs["pips_wrap"]
 		var orb: PanelContainer = refs["orb"]
 		var orb_tex: TextureRect = refs["orb_tex"]
 		orb_tex.texture = _get_type_icon(String(def["type"]))
-		orb.add_theme_stylebox_override("panel", _flat(Color("#16222f"), type_color.darkened(0.25), 26))
+		orb.add_theme_stylebox_override("panel", _flat(Color("#16222f"), type_color.darkened(0.25), 28))
 		name_l.text = String(def["name"])
 		cost_l.text = "%d费 · %s" % [cost, ZONE_NAMES[String(def["zone"][0])]]
 		action_l.text = action_line
 		pips_l.text = pips_line
 		name_l.add_theme_color_override("font_color", Color("#edf7ff") if afford else Color("#697887"))
-		cost_l.add_theme_color_override("font_color", Color("#fbbf24") if afford else Color("#7a6a45"))
 		action_l.add_theme_color_override("font_color", Color("#c9d8e6") if afford else Color("#697887"))
+		var badge_bg := Color("#fbbf24") if afford else Color("#4a4436")
+		cost_wrap.add_theme_stylebox_override("panel", _flat(badge_bg, Color("#d9a416"), 8))
+		cost_l.add_theme_color_override("font_color", Color("#231a05") if afford else Color("#8a8064"))
+		var strip_bg := Color("#3a3320") if afford else Color("#222a31")
+		pips_wrap.add_theme_stylebox_override("panel", _flat(strip_bg, Color("#fbbf24").darkened(0.3), 6))
 		pips_l.add_theme_color_override("font_color", Color("#fde68a") if afford else Color("#6b5f43"))
 		name_l.add_theme_font_size_override("font_size", 15)
-		cost_l.add_theme_font_size_override("font_size", 13)
-		action_l.add_theme_font_size_override("font_size", 13)
-		pips_l.add_theme_font_size_override("font_size", 13)
+		cost_l.add_theme_font_size_override("font_size", 12)
+		action_l.add_theme_font_size_override("font_size", 12)
+		pips_l.add_theme_font_size_override("font_size", 12)
 		var bg := Color("#1c2c40") if afford else Color("#131d2b")
 		if selected:
 			bg = bg.lightened(0.10)
