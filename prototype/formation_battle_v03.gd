@@ -195,6 +195,7 @@ var panel_mats := {"player": [], "enemy": []}
 var tokens := {"player": [], "enemy": []}
 var bomb_node: MeshInstance3D
 var bomb_material: StandardMaterial3D
+var bomb_label: Label3D
 var boom_node: MeshInstance3D
 var boom_material: StandardMaterial3D
 
@@ -207,6 +208,7 @@ var enemy_hp_bar: ProgressBar
 var stamina_bar: ProgressBar
 var stamina_label: Label
 var timer_label: Label
+var bomb_hud_label: Label
 var log_label: Label
 var feedback_label: Label
 var level_label: Label
@@ -540,6 +542,35 @@ func _update_bomb_visual(delta: float) -> void:
 	if bomb_node != null:
 		bomb_node.visible = bomb_cooldown <= 0.0
 		bomb_node.position = Vector3(bomb_vis_x, 0.42, LANE_Z[bomb_lane])
+	_update_bomb_countdown()
+
+
+# 炸弹倒计时反馈：头顶剩余秒数 + 临爆变色 / 脉冲 / 自发光转红，制造压迫感
+func _update_bomb_countdown() -> void:
+	if bomb_label == null:
+		return
+	if bomb_cooldown > 0.0:
+		bomb_label.visible = false
+		return
+	bomb_label.visible = true
+	var remain := maxf(0.0, bomb_timer)
+	bomb_label.text = str(ceili(remain))
+	var col := Color("#7fe4dd")
+	if remain <= 2.0:
+		col = Color("#fb7185")
+	elif remain <= 4.0:
+		col = Color("#fbbf24")
+	bomb_label.modulate = col
+	# 最后 2 秒球体轻微脉冲跳动
+	var pulse := 1.0
+	if remain <= 2.0:
+		pulse = 1.0 + 0.12 * sin(Time.get_ticks_msec() * 0.012)
+	bomb_node.scale = Vector3(pulse, pulse, pulse)
+	# 球体自发光随临爆升温转红
+	if bomb_material != null:
+		bomb_material.emission_enabled = true
+		bomb_material.emission = col
+		bomb_material.emission_energy_multiplier = 0.25 + (1.0 - remain / BOMB_TIMER) * 0.5
 
 
 func _step(delta: float) -> void:
@@ -1135,6 +1166,18 @@ func _build_world() -> void:
 		arrow.rotation_degrees = Vector3(0.0, 0.0, 90.0 * dir)
 		bomb_node.add_child(arrow)
 
+	# 头顶倒计时标签：剩余引爆时间 + 临爆变色/脉冲
+	bomb_label = Label3D.new()
+	bomb_label.position = Vector3(0.0, 0.95, 0.0)
+	bomb_label.font_size = 28
+	bomb_label.pixel_size = 0.012
+	bomb_label.outline_size = 8
+	bomb_label.outline_modulate = Color("#0b1220")
+	bomb_label.billboard = 1
+	bomb_label.text_horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bomb_label.text_vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	bomb_node.add_child(bomb_label)
+
 	# 爆炸冲击环
 	boom_node = MeshInstance3D.new()
 	var ring := TorusMesh.new()
@@ -1484,6 +1527,9 @@ func _build_ui() -> void:
 	timer_label.add_theme_font_size_override("font_size", 15)
 	timer_label.add_theme_color_override("font_color", Color("#a9bfd1"))
 	top.add_child(timer_label)
+	bomb_hud_label = Label.new()
+	bomb_hud_label.add_theme_font_size_override("font_size", 15)
+	top.add_child(bomb_hud_label)
 
 	# 顶部第二行：双方生命条 + 我方体力条
 	var status := HBoxContainer.new()
@@ -1670,6 +1716,28 @@ func _on_start() -> void:
 		restart()
 
 
+# 顶部 HUD 炸弹倒计时读数（与 3D 头顶标签互为冗余）
+func _update_bomb_hud() -> void:
+	if bomb_hud_label == null:
+		return
+	if phase == "deploy":
+		bomb_hud_label.text = "布阵阶段"
+		bomb_hud_label.add_theme_color_override("font_color", Color("#64748b"))
+		return
+	if bomb_cooldown > 0.0:
+		bomb_hud_label.text = "炸弹重生中"
+		bomb_hud_label.add_theme_color_override("font_color", Color("#64748b"))
+		return
+	var remain := maxf(0.0, bomb_timer)
+	var col := Color("#7fe4dd")
+	if remain <= 2.0:
+		col = Color("#fb7185")
+	elif remain <= 4.0:
+		col = Color("#fbbf24")
+	bomb_hud_label.text = "引爆 %ds" % ceili(remain)
+	bomb_hud_label.add_theme_color_override("font_color", col)
+
+
 func _refresh() -> void:
 	if not ui_enabled or player_hp_label == null:
 		return
@@ -1682,6 +1750,7 @@ func _refresh() -> void:
 	stamina_bar.value = player_stamina
 	stamina_label.text = "体力 %d / %d" % [player_stamina, STAMINA_MAX]
 	timer_label.text = "回合 %.1f / %.0f s  %s" % [battle_time, BATTLE_LIMIT, _phase_text()]
+	_update_bomb_hud()
 	level_label.text = String(LEVELS[level_id]["special"])
 	for id in level_buttons:
 		level_buttons[id].modulate = Color("#7fe4dd") if String(id) == level_id else Color.WHITE
