@@ -356,7 +356,7 @@
 
 ### 12.10 测试清单
 
-- **布阵 V0.3 线**：`smoke_formation_v03.gd`（冒烟断言）、`balance_v03.gd`（代理基线）、`debug_v03.gd`（单局轨迹 dump）、`probe_input_v03.gd`（手牌 meta 回溯 + 槽位射线往返）、`probe_deploy_slot.gd`（部署入口落盘断言）、`probe_gameplay_v03.gd`（时序密度/断档/体力/炸弹深度 + 克制对照）、`probe_rules_v03.gd`（控台压制扣时长/三种连携/跨路跟随/三阶段定时专项）。
+- **布阵 V0.3 线**：`smoke_formation_v03.gd`（冒烟断言）、`balance_v03.gd`（代理基线）、`debug_v03.gd`（单局轨迹 dump）、`probe_input_v03.gd`（手牌 meta 回溯 + 槽位射线往返）、`probe_deploy_slot.gd`（部署入口落盘断言）、`probe_gameplay_v03.gd`（时序密度/断档/体力/炸弹深度 + 克制对照）、`probe_rules_v03.gd`（控台压制扣时长/三种连携/跨路跟随/三阶段定时专项）、`probe_ui_build_v03.gd`（完整 UI 构建：光弧导轨/尾焰/音效节点链路）。
 - **回合制牌战线回归**：`smoke_battle` / `smoke_collection` / `smoke_equipment` / `smoke_gate` / `smoke_inventory` / `smoke_skills` / `smoke_trade`；UI 探针 `smoke_highlight.gd`、`smoke_hud.gd`。
 
 ### 12.11 文档索引

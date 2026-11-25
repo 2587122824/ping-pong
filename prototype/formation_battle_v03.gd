@@ -1154,7 +1154,7 @@ func _spawn_floater(world_pos: Vector3, text: String, color_hex: String) -> void
 	label.outline_size = 10
 	label.outline_modulate = Color("#0b1220")
 	label.modulate = Color(color_hex)
-	label.billboard = 1
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.position = world_pos + Vector3(0.0, 0.75, 0.0)
 	board_viewport.add_child(label)
 	floaters.append({"node": label, "life": 1.0})
@@ -1563,9 +1563,9 @@ func _build_world() -> void:
 	bomb_label.pixel_size = 0.012
 	bomb_label.outline_size = 8
 	bomb_label.outline_modulate = Color("#0b1220")
-	bomb_label.billboard = 1
-	bomb_label.text_horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	bomb_label.text_vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	bomb_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	bomb_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bomb_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	bomb_node.add_child(bomb_label)
 
 	# 爆炸冲击环
@@ -1780,7 +1780,7 @@ func _sync_tokens() -> void:
 				if token == null:
 					token = Sprite3D.new()
 					token.texture = _get_type_icon(String(unit.type))
-					token.billboard = 1
+					token.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 					token.position = _slot_position(side, lane, row) + Vector3(0.0, 0.30, 0.0)
 					token.scale = Vector3(0.42, 0.42, 0.42)
 					board_viewport.add_child(token)
@@ -1800,7 +1800,7 @@ func _sync_tokens() -> void:
 					label.pixel_size = 0.014
 					label.outline_size = 8
 					label.outline_modulate = Color("#0b1220")
-					label.billboard = 1
+					label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 					token.add_child(label)
 					tokens[side][lane][row] = token
 				token.texture = _get_type_icon(String(unit.type))

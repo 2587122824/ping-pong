@@ -50,7 +50,7 @@
 
 ## 运行状态
 
-本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描；回归脚本见 `prototype/tests/`：牌战线 `smoke_battle / smoke_collection / smoke_equipment / smoke_gate / smoke_inventory / smoke_skills / smoke_trade`；布阵 V0.3 线 `smoke_formation_v03`（去血单位/炸弹推拉/克制压制/BOSS 能力/生命结算）、`balance_v03`（两 BOSS 平衡基线）、`debug_v03`（单局轨迹）、`smoke_hud`（布阵原型打开/关闭时探索常驻 HUD 收起与恢复）、`smoke_highlight`（选牌后可放置槽位三态高亮与取消选中）、`probe_input_v03`（手牌 meta 回溯 + 槽位射线往返）、`probe_deploy_slot`（部署入口落盘断言）、`probe_gameplay_v03`（在场密度/断档/体力水位时序采样）、`probe_rules_v03`（控台扣时长/三种连携/跨路跟随/三阶段定时专项）。旧 V0.2 布阵冒烟与探针已随原型删除；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
+本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描；回归脚本见 `prototype/tests/`：牌战线 `smoke_battle / smoke_collection / smoke_equipment / smoke_gate / smoke_inventory / smoke_skills / smoke_trade`；布阵 V0.3 线 `smoke_formation_v03`（去血单位/炸弹推拉/克制压制/BOSS 能力/生命结算）、`balance_v03`（两 BOSS 平衡基线）、`debug_v03`（单局轨迹）、`smoke_hud`（布阵原型打开/关闭时探索常驻 HUD 收起与恢复）、`smoke_highlight`（选牌后可放置槽位三态高亮与取消选中）、`probe_input_v03`（手牌 meta 回溯 + 槽位射线往返）、`probe_deploy_slot`（部署入口落盘断言）、`probe_gameplay_v03`（在场密度/断档/体力水位时序采样）、`probe_rules_v03`（控台扣时长/三种连携/跨路跟随/三阶段定时专项）、`probe_ui_build_v03`（完整 UI 构建：光弧导轨/尾焰/音效节点链路）。旧 V0.2 布阵冒烟与探针已随原型删除；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
 
 ## 下一步
 
