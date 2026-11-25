@@ -107,3 +107,4 @@
 - 2026-11-25 修复槽位拾取失效：Godot 4.7.2 的 `Camera3D`/`SubViewport` 均无 `get_screen_ray` 方法，射线改为 `project_ray_origin(screen)` + `project_ray_normal(screen)` 手工构造；`SubViewport.world_3d` 在未独立建世界时为 null，物理空间回退 `get_world_3d().direct_space_state`。探针投影 9 个我方槽位世界坐标回屏幕再拾取，side/lane/row 全部命中，符合区域的牌 `try_deploy` 成功。
 - 2026-11-25 棋盘放大：车道 Z 间距收紧到 ±1.2（槽位/台面/中线深度同步收窄），相机拉近到 (0,7.5,0.8)，棋盘铺满顶部视口带状区域，棋子与卡名标签清晰可读。
 - 2026-11-25 修复炸弹位置异常：① 布阵阶段开局单位的 `entry_push`（`tt_rip` 入场免费推击）会在开战前就把主炸弹推离中线，现仅在 `phase=="battle"` 时触发，布阵阶段炸弹固定在中线 0；② 炸弹 Z 向不再跟随最后推球单位在车道间跳变（`_push` 不再改写 `bomb_lane`，固定中路）；③ 炸弹 X 向改为视觉缓动（`bomb_vis_x`，`move_toward` 速度 10/s），不再按每次推力直接瞬移。`bomb_lane` 语义改为固定中路记录位。
+- 2026-11-25 拖拽/点按穿透修正：鼠标按下/抬起时只把真正的 `Button`（手牌、自动布阵、开战、关卡按钮）视为拦截控件； inert 的容器/标签不再挡射线，点在棋盘空白区域直接走 3D 槽位拾取。

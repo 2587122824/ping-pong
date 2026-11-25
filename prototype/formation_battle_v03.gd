@@ -1053,8 +1053,8 @@ func _on_mouse_down(event: InputEventMouseButton) -> void:
 		drag_start = event.position
 		drag_active = false
 		return
-	# 点在其他 2D 控件（按钮/标签/棋盘视口容器）上时不穿透到 3D 槽位
-	if hovered != null and hovered != board_container:
+	# 点在其他可交互按钮上时不穿透； inert 容器/标签不拦截，继续走 3D 槽位射线
+	if hovered != null and hovered is Button:
 		return
 	var slot := _pick_slot(event.position)
 	if not slot.is_empty():
@@ -1066,7 +1066,7 @@ func _on_mouse_up(event: InputEventMouseButton) -> void:
 		return
 	if drag_active:
 		var hovered_up := get_viewport().gui_get_hovered_control()
-		var over_gui := hovered_up != null and hovered_up != board_container and not hovered_up.has_meta("hand_index")
+		var over_gui := hovered_up != null and hovered_up is Button and not hovered_up.has_meta("hand_index")
 		if not over_gui:
 			var slot := _pick_slot(event.position)
 			if not slot.is_empty() and String(slot["side"]) == "player":
