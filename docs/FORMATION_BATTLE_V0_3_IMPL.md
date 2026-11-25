@@ -115,3 +115,4 @@
 - **美术待办（下一轮）**：单位瓷砖与手牌顶部的球拍/球/旋转球图标仍为纯色占位，需替换为正式 sprite 或 GLB 资产；台面网格分隔与桌沿外框可再细化；背景补聚光灯光束与浮尘粒子；BOSS 能力条做金色徽章芯片样式。
 - 2026-11-25 主战斗界面向设计图对齐：① 手牌由纯文字 Button 重构为卡片式 `PanelContainer`——顶部类型色圆形 orb、卡名、黄色 `费用费 · 区域`、出手/持续行、黄色剩余次数点数；② BOSS 能力前加金色 ★ 徽章芯片；③ 底部「自动布阵 / 开战」按钮右对齐；④ 体力条青色、槽位木纹分深浅；⑤ 单位底座改深色卡片砖，背景加 36 粒上浮余烬粒子（CPUParticles3D）。orb 内招式图标、聚光灯光束仍待正式 sprite/GLB 资产（见 #27）。
 - 2026-11-25 招式图标资产落地：`prototype/assets/icons/` 下四类型 256×256 透明 PNG——`icon_fast`（橙拍快攻）、`icon_spin`（粉色上旋球）、`icon_control`（绿色短摆球）、`icon_counter`（蓝拍反拉）。手牌 orb 与 3D 单位瓷砖均按卡牌类型取图；3D 单位由圆球改为 `Sprite3D`（billboard 朝向相机）。图标经 `Image.load` + `ImageTexture.create_from_image` 载入（绕开 headless 未导入 PNG 的资源加载器），`_get_type_icon` 带缓存。
+- 2026-11-25 炸弹引爆重生节奏：新增 `BOMB_RESPAWN=3.0` 秒冷却与 `bomb_cooldown` 状态。引爆后炸弹回中线、隐藏离场，冷却期内 `_push` 不作用于炸弹、定时暂停；倒计时结束放下一颗新炸弹并重置 `bomb_timer=BOMB_TIMER`，双方重新推球。

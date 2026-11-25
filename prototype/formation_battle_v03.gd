@@ -19,6 +19,7 @@ const HAND_SIZE := 5
 const BOMB_TIMER := 7.0
 const BOMB_RANGE := 7.0
 const BOMB_DAMAGE := 15
+const BOMB_RESPAWN := 3.0
 const BASELINE_DAMAGE := 22
 const PLAYER_MAX_HP := 100
 const BATTLE_LIMIT := 90.0
@@ -150,6 +151,8 @@ var bomb_pos := 0.0
 var bomb_timer := BOMB_TIMER
 var bomb_lane := 1
 var boom_time := 0.0
+# 引爆后的重生冷却：>0 时炸弹不在场，推力不作用，倒计时结束后放下一颗新炸弹
+var bomb_cooldown := 0.0
 # 炸弹视觉位置（缓动用，避免每次推力直接瞬移）
 var bomb_vis_x := 0.0
 
@@ -259,6 +262,7 @@ func restart() -> void:
 	bomb_timer = BOMB_TIMER
 	bomb_lane = 1
 	boom_time = 0.0
+	bomb_cooldown = 0.0
 	bomb_vis_x = 0.0
 	hand = []
 	draw_pile = []
@@ -530,6 +534,7 @@ func _update_bomb_visual(delta: float) -> void:
 	var target_x := bomb_pos / BOMB_RANGE * 7.15
 	bomb_vis_x = move_toward(bomb_vis_x, target_x, delta * 10.0)
 	if bomb_node != null:
+		bomb_node.visible = bomb_cooldown <= 0.0
 		bomb_node.position = Vector3(bomb_vis_x, 0.42, LANE_Z[bomb_lane])
 
 
@@ -541,11 +546,17 @@ func _step(delta: float) -> void:
 		player_stamina = mini(STAMINA_MAX, player_stamina + REGEN_AMOUNT)
 		enemy_stamina = mini(STAMINA_MAX, enemy_stamina + ENEMY_REGEN_AMOUNT)
 
-	# 炸弹计时
-	bomb_timer = bomb_timer - delta
-	if bomb_timer <= 0.0:
-		_detonate("timer")
-		bomb_timer = BOMB_TIMER
+	# 炸弹冷却与计时：引爆后隔几秒放下一颗新炸弹，期间不推球
+	if bomb_cooldown > 0.0:
+		bomb_cooldown -= delta
+		if bomb_cooldown <= 0.0:
+			bomb_cooldown = 0.0
+			bomb_timer = BOMB_TIMER
+			_log("新炸弹放到中线，双方重新推球")
+	else:
+		bomb_timer = bomb_timer - delta
+		if bomb_timer <= 0.0:
+			_detonate("timer")
 
 	# 双方单位出手
 	for side in ["player", "enemy"]:
@@ -636,6 +647,9 @@ func _interval_mult(unit) -> float:
 
 
 func _push(side: String, lane: int, amount: float, unit = null) -> void:
+	# 炸弹重生冷却期间场上无球，推力不作用
+	if bomb_cooldown > 0.0:
+		return
 	if lane < 0 or lane >= LANES or amount == 0.0:
 		return
 	var sign_dir := 1.0 if side == "player" else -1.0
@@ -772,6 +786,10 @@ func _detonate(reason: String) -> void:
 		_damage_side("player", BASELINE_DAMAGE, "炸弹被推到底线")
 	play_explosion()
 	bomb_pos = 0.0
+	bomb_cooldown = BOMB_RESPAWN
+	if bomb_node != null:
+		bomb_node.visible = false
+	_log("炸弹引爆，%.0f 秒后放下一颗新球" % BOMB_RESPAWN)
 
 
 func play_explosion() -> void:

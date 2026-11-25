@@ -75,6 +75,12 @@ func _run() -> void:
 	battle.tick(0.1)
 	assert(battle.enemy_hp == hp_before - 15, "timer detonation hurts the side the bomb sits on: %d" % battle.enemy_hp)
 	assert(absf(battle.bomb_pos) < 0.01, "bomb resets to the centre line: %.2f" % battle.bomb_pos)
+	# 引爆后进入重生冷却：冷却期推球不作用，结束后放下一颗新炸弹
+	assert(battle.bomb_cooldown > 0.0, "bomb enters respawn cooldown after detonation")
+	battle._push("player", 0, 3.0)
+	assert(absf(battle.bomb_pos) < 0.01, "push is suppressed during respawn cooldown")
+	battle.tick(battle.BOMB_RESPAWN + 0.2)
+	assert(battle.bomb_cooldown <= 0.0, "new bomb drops after respawn cooldown")
 
 	# 推到底线立即引爆
 	battle.restart()
