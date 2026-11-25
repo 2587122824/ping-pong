@@ -1042,8 +1042,10 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and drag_card >= 0:
 		if not drag_active and event.position.distance_to(drag_start) > 10.0:
 			drag_active = true
+			_refresh()
 		if drag_active:
-			_show_drag_label(String(hand[drag_card]), event.position)
+			var drag_cid := String(hand[drag_card])
+			_show_drag_label(String(CARDS[drag_cid]["name"]), event.position)
 
 
 func _on_mouse_down(event: InputEventMouseButton) -> void:
@@ -1076,6 +1078,7 @@ func _on_mouse_up(event: InputEventMouseButton) -> void:
 	drag_card = -1
 	drag_active = false
 	_hide_drag_label()
+	_refresh()
 
 
 func _pick_slot(screen_pos: Vector2) -> Dictionary:
@@ -1188,8 +1191,11 @@ func _sync_board_visuals() -> void:
 	_sync_tokens()
 
 	var card_id := ""
-	if selected_card >= 0 and selected_card < hand.size():
-		card_id = String(hand[selected_card])
+	var highlight_idx := selected_card
+	if highlight_idx < 0 and drag_active and drag_card >= 0 and drag_card < hand.size():
+		highlight_idx = drag_card
+	if highlight_idx >= 0 and highlight_idx < hand.size():
+		card_id = String(hand[highlight_idx])
 
 	for lane in range(LANES):
 		for row in range(ROWS):
