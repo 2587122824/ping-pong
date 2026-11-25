@@ -6,7 +6,7 @@
 
 项目处于概念设计与玩法原型验证阶段。Godot 4.7.2 Standard 已安装；`prototype/` 包含第三人称移动、对话/商人/牌战 NPC、背包交易、图鉴与双向即时传送，以及体力费用制回合战斗（保留作回归对照）。
 
-**当前布阵主线为 V0.3 实时布阵自动战斗**（`formation_battle_v03.tscn`，F2 或「阵战原型」按钮打开）；旧 V0.2 HP 单位体系及其探针/测试已删除。V0.3 已落地：3×7 站桩阵型、13 张乒乓球招式牌、四类克制与克制压制、单颗共享炸弹（定时/推底引爆 + 重生冷却 + 倒计时反馈）、跨路支援、换阵返还、炸弹冲击波、两个街头 BOSS。机制细节、平衡基线与待验证项见 `docs/FORMATION_BATTLE_V0_3_IMPL.md`。
+**当前布阵主线为 V0.3 实时布阵自动战斗**（`formation_battle_v03.tscn`，F2 或「阵战原型」按钮打开）；旧 V0.2 HP 单位体系及其探针/测试已删除。V0.3 已落地：3×7 站桩阵型、13 张乒乓球招式牌、四类克制与克制压制、单颗共享炸弹（定时/推底引爆 + 重生冷却 + 倒计时反馈）、跨路支援、换阵返还、炸弹冲击波、两个街头 BOSS。机制细节、平衡基线与待验证项见产品方向文档 §12 与设计文档 §8。
 
 仓库当前主要用于沉淀《拿拍》的产品方向和设计决策。
 
@@ -24,7 +24,7 @@
 完整记录见：
 
 - `docs/PRODUCT_DIRECTION.md`
-- 实时布阵自动战斗 V0.3（当前主线）：`docs/FORMATION_BATTLE_V0_3_IMPL.md`（实现常量/卡表/基线/遗留）；设计原文 `docs/FORMATION_BATTLE_V0_3.md`
+- 实时布阵自动战斗 V0.3（当前主线）：设计原文 `docs/FORMATION_BATTLE_V0_3.md`；产品方向汇总见 `docs/PRODUCT_DIRECTION.md` §12
 - `docs/DECISION_LOG.md`
 - `docs/FUTURE_WORLD_SIMULATION_V0_1.md`
 

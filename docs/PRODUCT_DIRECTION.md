@@ -328,7 +328,7 @@
 - **发球吃转反推**：`tt_serve` 所在路敌方首次进攻被反推一半力度，只触发一次。
 - **反拉反射**：快撕/正手反拉/反手反拉按各自反射类型借力反推炸弹。
 - **控台 debuff**：摆短压 spin 推力 ×0.5、间隔 ×1.5；劈长压 fast 推力 ×0.6、间隔 ×1.3。
-- **界面与 3D 链路**：场景隔离（打开布阵隐藏探索常驻 Node3D）、手牌拖拽/点选部署、槽位三态高亮（可放空槽/可覆盖/不符区域）、独立 `SubViewport` 3D 棋盘、棋子头顶卡名 ×次数标签。完整界面改动记录见实现文档 §6。
+- **界面与 3D 链路**：场景隔离（打开布阵隐藏探索常驻 Node3D）、手牌拖拽/点选部署、槽位三态高亮（可放空槽/可覆盖/不符区域）、独立 `SubViewport` 3D 棋盘、棋子头顶卡名 ×次数标签。
 
 ### 12.8 实测基线与现状判断
 
@@ -362,6 +362,5 @@
 ### 12.11 文档索引
 
 - V0.3 设计草案与落地对照偏差：[`FORMATION_BATTLE_V0_3.md`](FORMATION_BATTLE_V0_3.md)
-- V0.3 实现常量、卡表、平衡基线与完整改动记录：[`FORMATION_BATTLE_V0_3_IMPL.md`](FORMATION_BATTLE_V0_3_IMPL.md)
 - 当前交接现状与下一步：[`HANDOFF_CONTEXT.md`](HANDOFF_CONTEXT.md)
 - 决策记录：[`DECISION_LOG.md`](DECISION_LOG.md)；未来世界观：[`FUTURE_WORLD_SIMULATION_V0_1.md`](FUTURE_WORLD_SIMULATION_V0_1.md)
