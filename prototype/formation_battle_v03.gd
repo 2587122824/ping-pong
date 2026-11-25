@@ -1214,17 +1214,10 @@ func _sync_board_visuals() -> void:
 				else:
 					mat.albedo_color = _zone_color(zone_of_row(row))
 
-	# 炸弹位置：沿 X 轴压到对应半场格子，固定中路
+	# 炸弹位置：沿 X 轴压到对应半场格子，固定中路；颜色保持金属深色，不随半场切换
 	var bomb_x := bomb_vis_x
 	if bomb_node != null:
 		bomb_node.position = Vector3(bomb_x, 0.42, LANE_Z[bomb_lane])
-		if bomb_material != null:
-			if bomb_pos < -0.3:
-				bomb_material.albedo_color = Color("#7fb7d9")
-			elif bomb_pos > 0.3:
-				bomb_material.albedo_color = Color("#f08a8a")
-			else:
-				bomb_material.albedo_color = Color("#262c34")
 
 
 # ---------------------------------------------------------------- 2D 覆盖层
