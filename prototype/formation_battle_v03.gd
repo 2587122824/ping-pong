@@ -1364,7 +1364,12 @@ func _sync_tokens() -> void:
 					tokens[side][lane][row] = token
 				token.texture = _get_type_icon(String(unit.type))
 				var base_mat: StandardMaterial3D = token.get_child(0).material_override
-				base_mat.albedo_color = Color("#1c2735")
+				var type_color: Color = TYPE_COLORS[String(unit.type)]
+				base_mat.albedo_color = Color("#2b3a4d")
+				base_mat.roughness = 0.7
+				base_mat.emission_enabled = true
+				base_mat.emission = type_color
+				base_mat.emission_energy_multiplier = 0.12
 				var unit_label: Label3D = token.get_node_or_null("unit_label")
 				if unit_label != null:
 					var suffix := "" if int(unit.actions) <= 0 else " ×%d" % int(unit.actions)
