@@ -203,7 +203,7 @@
 
 ### 卡牌对战第一版验证
 
-当前原型规则的详细说明见[《卡牌战斗规则 V0.1》](CARD_BATTLE_RULES_V0_1.md)；本节保留产品方向层面的范围摘要。关卡样本与通用关卡模板见[《关卡设计 V0.1》](LEVEL_DESIGN_V0_1.md)，五个样本已接入原型验证，数值与战败/恢复等外部流程仍是候选设计。
+本小节保留回合制牌战原型的产品方向层面范围摘要；关卡样本与通用关卡模板的旧文档已随原型清理。
 
 产品发起人提出将游戏做成卡牌对战，并要求先制作第一版。当前原型据此加入顾言作为可挑战 NPC，用一场简易回合制战斗验证“读对手意图、规划体力预算、攻击/防御、结束回合”的基础决策循环。这代表当前原型方向，不代表最终产品品类或战斗形式已经定案。
 
@@ -364,6 +364,4 @@
 - V0.3 设计草案与落地对照偏差：[`FORMATION_BATTLE_V0_3.md`](FORMATION_BATTLE_V0_3.md)
 - V0.3 实现常量、卡表、平衡基线与完整改动记录：[`FORMATION_BATTLE_V0_3_IMPL.md`](FORMATION_BATTLE_V0_3_IMPL.md)
 - 当前交接现状与下一步：[`HANDOFF_CONTEXT.md`](HANDOFF_CONTEXT.md)
-- 回合制牌战规则：[`CARD_BATTLE_RULES_V0_1.md`](CARD_BATTLE_RULES_V0_1.md)；关卡样本：[`LEVEL_DESIGN_V0_1.md`](LEVEL_DESIGN_V0_1.md)
-- 历史记录（对应原型代码已不在仓库）：`FORMATION_BATTLE_V0_1.md`、`FORMATION_BATTLE_V0_2.md`、`BALANCE_BASELINE_V0_1.md`、`BOSS_CH0_B01.md`、`CARD_DESIGN_V0_2.md`
 - 决策记录：[`DECISION_LOG.md`](DECISION_LOG.md)；未来世界观：[`FUTURE_WORLD_SIMULATION_V0_1.md`](FUTURE_WORLD_SIMULATION_V0_1.md)
