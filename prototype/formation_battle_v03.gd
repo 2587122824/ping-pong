@@ -1062,6 +1062,24 @@ func _build_world() -> void:
 	boom_node.visible = false
 	world.add_child(boom_node)
 
+	# 背景上浮余烬粒子（舞台氛围）
+	var embers := CPUParticles3D.new()
+	embers.amount = 36
+	embers.lifetime = 4.0
+	embers.preload = 4
+	embers.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	embers.emission_sphere_radius = 6.0
+	embers.direction = Vector3(0.0, 1.0, 0.0)
+	embers.spread = 25.0
+	embers.gravity = Vector3(0.0, 0.12, 0.0)
+	embers.initial_velocity_min = 0.15
+	embers.initial_velocity_max = 0.5
+	embers.scale_amount_min = 0.04
+	embers.scale_amount_max = 0.1
+	embers.color = Color(1.0, 0.72, 0.35, 0.65)
+	embers.emitting = true
+	world.add_child(embers)
+
 
 func _zone_color(zone: String) -> Color:
 	match zone:
@@ -1219,7 +1237,7 @@ func _sync_tokens() -> void:
 				var mat: StandardMaterial3D = token.material_override
 				mat.albedo_color = _token_color(unit)
 				var base_mat: StandardMaterial3D = token.get_child(0).material_override
-				base_mat.albedo_color = _token_color(unit).darkened(0.55)
+				base_mat.albedo_color = Color("#1c2735")
 				var unit_label: Label3D = token.get_node_or_null("unit_label")
 				if unit_label != null:
 					var suffix := "" if int(unit.actions) <= 0 else " ×%d" % int(unit.actions)
