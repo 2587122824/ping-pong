@@ -951,7 +951,7 @@ func _slot_position(side: String, lane: int, row: int) -> Vector3:
 func _build_world() -> void:
 	# 3D 棋盘渲染进独立 SubViewport，固定在顶部带状区域，不与底部手牌重叠
 	board_viewport = SubViewport.new()
-	board_viewport.size = Vector2i(1240, 330)
+	board_viewport.size = Vector2i(1240, 300)
 	board_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	# 独立 3D 世界：否则棋子/炸弹挂在共享主世界里，主相机也会把它们再渲染一遍，界面下方漏出第二套阵型
 	board_viewport.own_world_3d = true
@@ -1158,6 +1158,25 @@ func _build_world() -> void:
 	embers.color = Color(1.0, 0.72, 0.35, 0.65)
 	embers.emitting = true
 	world.add_child(embers)
+
+	# 两侧斜射光束（半透明加法面片模拟舞台光，无碰撞体，不影响槽位射线）
+	for beam_side in [-1, 1]:
+		var beam := MeshInstance3D.new()
+		var beam_mesh := PlaneMesh.new()
+		beam_mesh.size = Vector2(5.0, 11.0)
+		beam.mesh = beam_mesh
+		var beam_mat := StandardMaterial3D.new()
+		beam_mat.albedo_color = Color(0.62, 0.78, 1.0, 0.05)
+		beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		beam_mat.emission_enabled = true
+		beam_mat.emission = Color(0.55, 0.72, 1.0)
+		beam_mat.emission_energy_multiplier = 0.35
+		beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		beam.material_override = beam_mat
+		beam.position = Vector3(beam_side * 4.5, 3.0, -1.5)
+		beam.rotation_degrees = Vector3(18.0, beam_side * 24.0, beam_side * 12.0)
+		world.add_child(beam)
 
 
 func _zone_color(zone: String) -> Color:
@@ -1486,26 +1505,29 @@ func _build_ui() -> void:
 
 	# 棋盘 3D 视口（固定在顶部带状区域，手牌在其下方，互不遮挡）
 	board_container = SubViewportContainer.new()
-	board_container.custom_minimum_size = Vector2(1240, 330)
+	board_container.custom_minimum_size = Vector2(1240, 300)
 	board_container.stretch = true
 	board_container.add_child(board_viewport)
 	main.add_child(board_container)
 
 	# 手牌
 	var hand_row := HBoxContainer.new()
-	hand_row.add_theme_constant_override("separation", 8)
+	hand_row.add_theme_constant_override("separation", 12)
+	var hand_left_spacer := Control.new()
+	hand_left_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hand_row.add_child(hand_left_spacer)
 	main.add_child(hand_row)
 	hand_bar = hand_row
 	for i in range(HAND_SIZE):
 		var card := PanelContainer.new()
-		card.custom_minimum_size = Vector2(236, 124)
+		card.custom_minimum_size = Vector2(150, 140)
 		card.set_meta("hand_index", i)
 		var vbox := VBoxContainer.new()
 		vbox.alignment = VBoxContainer.ALIGNMENT_CENTER
-		vbox.add_theme_constant_override("separation", 3)
+		vbox.add_theme_constant_override("separation", 4)
 		card.add_child(vbox)
 		var orb := PanelContainer.new()
-		orb.custom_minimum_size = Vector2(56, 56)
+		orb.custom_minimum_size = Vector2(64, 64)
 		orb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 		var orb_tex := TextureRect.new()
 		orb_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
@@ -1534,6 +1556,9 @@ func _build_ui() -> void:
 		card.set_meta("refs", {"orb": orb, "orb_tex": orb_tex, "name": name_l, "cost": cost_l, "cost_wrap": cost_wrap, "action": action_l, "pips": pips_l, "pips_wrap": pips_wrap})
 		hand_buttons.append(card)
 		hand_row.add_child(card)
+	var hand_right_spacer := Control.new()
+	hand_right_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hand_row.add_child(hand_right_spacer)
 
 	drag_label = Label.new()
 	drag_label.add_theme_font_size_override("font_size", 16)
@@ -1542,36 +1567,39 @@ func _build_ui() -> void:
 	drag_label.visible = false
 	root.add_child(drag_label)
 
-	# 底部操作 + 日志
+	# 底部操作：反馈文字居左，两枚大胶囊按钮纵向排在右下
 	var bottom := HBoxContainer.new()
-	bottom.add_theme_constant_override("separation", 10)
+	bottom.add_theme_constant_override("separation", 12)
 	main.add_child(bottom)
-	var bottom_spacer := Control.new()
-	bottom_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bottom.add_child(bottom_spacer)
-	auto_button = Button.new()
-	auto_button.text = "自动布阵"
-	auto_button.custom_minimum_size = Vector2(150, 46)
-	auto_button.add_theme_font_size_override("font_size", 16)
-	auto_button.add_theme_stylebox_override("normal", _flat(Color("#2a3646"), Color("#46586c"), 12))
-	auto_button.add_theme_stylebox_override("hover", _flat(Color("#35455a"), Color("#5d7488"), 12))
-	auto_button.pressed.connect(func(): auto_deploy())
-	bottom.add_child(auto_button)
-	start_button = Button.new()
-	start_button.text = "开战 / 重开"
-	start_button.custom_minimum_size = Vector2(170, 46)
-	start_button.add_theme_font_size_override("font_size", 16)
-	start_button.add_theme_stylebox_override("normal", _flat(Color("#173a36"), Color("#34d399"), 12))
-	start_button.add_theme_stylebox_override("hover", _flat(Color("#1e4a43"), Color("#6ee7b7"), 12))
-	start_button.pressed.connect(_on_start)
-	bottom.add_child(start_button)
 	feedback_label = Label.new()
+	feedback_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	feedback_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	feedback_label.add_theme_font_size_override("font_size", 15)
 	bottom.add_child(feedback_label)
+	var btn_col := VBoxContainer.new()
+	btn_col.add_theme_constant_override("separation", 10)
+	btn_col.alignment = VBoxContainer.ALIGNMENT_END
+	bottom.add_child(btn_col)
+	auto_button = Button.new()
+	auto_button.text = "自动布阵"
+	auto_button.custom_minimum_size = Vector2(180, 50)
+	auto_button.add_theme_font_size_override("font_size", 16)
+	auto_button.add_theme_stylebox_override("normal", _flat(Color("#2a3646"), Color("#46586c"), 16))
+	auto_button.add_theme_stylebox_override("hover", _flat(Color("#35455a"), Color("#5d7488"), 16))
+	auto_button.pressed.connect(func(): auto_deploy())
+	btn_col.add_child(auto_button)
+	start_button = Button.new()
+	start_button.text = "开战 / 重开"
+	start_button.custom_minimum_size = Vector2(180, 50)
+	start_button.add_theme_font_size_override("font_size", 16)
+	start_button.add_theme_stylebox_override("normal", _flat(Color("#173a36"), Color("#34d399"), 16))
+	start_button.add_theme_stylebox_override("hover", _flat(Color("#1e4a43"), Color("#6ee7b7"), 16))
+	start_button.pressed.connect(_on_start)
+	btn_col.add_child(start_button)
 
 	log_label = Label.new()
 	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	log_label.custom_minimum_size = Vector2(1220, 80)
+	log_label.custom_minimum_size = Vector2(1220, 56)
 	log_label.add_theme_font_size_override("font_size", 13)
 	log_label.add_theme_color_override("font_color", Color("#a9bfd1"))
 	main.add_child(log_label)
@@ -1674,8 +1702,8 @@ func _refresh() -> void:
 		orb_tex.texture = _get_type_icon(String(def["type"]))
 		orb.add_theme_stylebox_override("panel", _flat(Color("#16222f"), type_color.darkened(0.25), 28))
 		name_l.text = String(def["name"])
-		cost_l.text = "%d费 · %s" % [cost, ZONE_NAMES[String(def["zone"][0])]]
-		action_l.text = action_line
+		cost_l.text = "%d费" % cost
+		action_l.text = "%s · %s" % [action_line, ZONE_NAMES[String(def["zone"][0])]]
 		pips_l.text = pips_line
 		name_l.add_theme_color_override("font_color", Color("#edf7ff") if afford else Color("#697887"))
 		action_l.add_theme_color_override("font_color", Color("#c9d8e6") if afford else Color("#697887"))
