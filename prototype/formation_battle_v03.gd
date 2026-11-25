@@ -893,17 +893,17 @@ func _build_world() -> void:
 	var env_node := WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("#0b1220")
+	env.background_color = Color("#0a1322")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("#9db8d6")
-	env.ambient_light_energy = 0.85
+	env.ambient_light_color = Color("#8fa9c8")
+	env.ambient_light_energy = 0.7
 	env_node.environment = env
 	world.add_child(env_node)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-55, 25, 0)
-	sun.light_color = Color("#b9d7ff")
-	sun.light_energy = 1.1
+	sun.light_color = Color("#ffe6c4")
+	sun.light_energy = 1.0
 	world.add_child(sun)
 
 	battle_camera = Camera3D.new()
@@ -912,31 +912,42 @@ func _build_world() -> void:
 	battle_camera.look_at_from_position(Vector3(0.0, 7.5, 0.8), Vector3.ZERO, Vector3.UP)
 	battle_camera.current = true
 
-	# 台面底座外框
+	# 台面底座外框（深色木托）
 	var frame := MeshInstance3D.new()
 	var frame_box := BoxMesh.new()
 	frame_box.size = Vector3(15.9, 0.18, 5.0)
 	frame.mesh = frame_box
-	frame.material_override = _material(Color("#0a1420"))
+	var frame_mat := StandardMaterial3D.new()
+	frame_mat.albedo_color = Color("#1a212c")
+	frame_mat.roughness = 0.8
+	frame.material_override = frame_mat
 	frame.position = Vector3(0.0, -0.22, 0.0)
 	world.add_child(frame)
 
-	# 台面
+	# 台面（暖橡木）
 	table_mesh = MeshInstance3D.new()
 	var table_box := BoxMesh.new()
 	table_box.size = Vector3(15.5, 0.3, 4.6)
 	table_mesh.mesh = table_box
-	table_mesh.material_override = _material(Color("#122338"))
+	var table_mat := StandardMaterial3D.new()
+	table_mat.albedo_color = Color("#a8794a")
+	table_mat.roughness = 0.75
+	table_mesh.material_override = table_mat
 	table_mesh.position = Vector3(0.0, -0.15, 0.0)
 	world.add_child(table_mesh)
 
-	# 中线提示条
+	# 中线发光球网
 	var center_line := MeshInstance3D.new()
 	var center_box := BoxMesh.new()
-	center_box.size = Vector3(0.12, 0.02, 4.2)
+	center_box.size = Vector3(0.1, 0.03, 4.2)
 	center_line.mesh = center_box
-	center_line.material_override = _material(Color("#35567a"), true)
-	center_line.position = Vector3(0.0, 0.01, 0.0)
+	var net_mat := StandardMaterial3D.new()
+	net_mat.albedo_color = Color("#8fdcff")
+	net_mat.emission_enabled = true
+	net_mat.emission = Color("#6fc9ff")
+	net_mat.emission_energy_multiplier = 0.9
+	center_line.material_override = net_mat
+	center_line.position = Vector3(0.0, 0.02, 0.0)
 	world.add_child(center_line)
 
 	# 槽位面板 + 点选 Area3D
@@ -1006,6 +1017,36 @@ func _build_world() -> void:
 	fuse.position = Vector3(0.0, 0.5, 0.0)
 	bomb_node.add_child(fuse)
 
+	# 炸弹脚下金色光环
+	var aura := MeshInstance3D.new()
+	var aura_ring := TorusMesh.new()
+	aura_ring.inner_radius = 0.52
+	aura_ring.outer_radius = 0.7
+	aura.mesh = aura_ring
+	var aura_mat := StandardMaterial3D.new()
+	aura_mat.albedo_color = Color(1.0, 0.85, 0.3, 0.7)
+	aura_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	aura_mat.emission_enabled = true
+	aura_mat.emission = Color(1.0, 0.78, 0.25)
+	aura_mat.emission_energy_multiplier = 0.9
+	aura.material_override = aura_mat
+	aura.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	aura.position = Vector3(0.0, 0.08, 0.0)
+	bomb_node.add_child(aura)
+
+	# 左右方向小箭头（提示拔河推力方向）
+	for dir in [-1, 1]:
+		var arrow := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = 0.09
+		cone.height = 0.24
+		arrow.mesh = cone
+		arrow.material_override = _material(Color("#f4f8ff"), true)
+		arrow.position = Vector3(0.58 * dir, 0.0, 0.0)
+		arrow.rotation_degrees = Vector3(0.0, 0.0, 90.0 * dir)
+		bomb_node.add_child(arrow)
+
 	# 爆炸冲击环
 	boom_node = MeshInstance3D.new()
 	var ring := TorusMesh.new()
@@ -1025,12 +1066,12 @@ func _build_world() -> void:
 func _zone_color(zone: String) -> Color:
 	match zone:
 		"near":
-			return Color("#21486a")
+			return Color("#bd8c57")
 		"mid":
-			return Color("#1d3550")
+			return Color("#ad7f4d")
 		"far":
-			return Color("#18283d")
-	return Color("#1d3550")
+			return Color("#976c3e")
+	return Color("#ad7f4d")
 
 
 func _input(event: InputEvent) -> void:
@@ -1149,27 +1190,25 @@ func _sync_tokens() -> void:
 					continue
 				if token == null:
 					token = MeshInstance3D.new()
-					var capsule := CapsuleMesh.new()
-					capsule.height = 0.72
-					capsule.radius = 0.26
-					token.mesh = capsule
+					var orb := SphereMesh.new()
+					orb.radius = 0.22
+					orb.height = 0.44
+					token.mesh = orb
 					token.material_override = StandardMaterial3D.new()
-					token.position = _slot_position(side, lane, row) + Vector3(0.0, 0.42, 0.0)
+					token.position = _slot_position(side, lane, row) + Vector3(0.0, 0.30, 0.0)
 					board_viewport.add_child(token)
-					# 棋子底座圆盘
+					# 卡片式方形底座
 					var base := MeshInstance3D.new()
-					var base_cyl := CylinderMesh.new()
-					base_cyl.top_radius = 0.34
-					base_cyl.bottom_radius = 0.34
-					base_cyl.height = 0.08
-					base.mesh = base_cyl
+					var tile := BoxMesh.new()
+					tile.size = Vector3(0.72, 0.06, 0.92)
+					base.mesh = tile
 					base.material_override = StandardMaterial3D.new()
-					base.position = Vector3(0.0, -0.38, 0.0)
+					base.position = Vector3(0.0, -0.26, 0.0)
 					token.add_child(base)
 					# 头顶卡牌名标签
 					var label := Label3D.new()
 					label.name = "unit_label"
-					label.position = Vector3(0.0, 0.85, 0.0)
+					label.position = Vector3(0.0, 0.62, 0.0)
 					label.font_size = 22
 					label.pixel_size = 0.010
 					label.outline_size = 6
@@ -1293,11 +1332,17 @@ func _build_ui() -> void:
 	st_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status.add_child(st_spacer)
 	stamina_label = Label.new()
+	stamina_label.add_theme_color_override("font_color", Color("#7dd3fc"))
 	status.add_child(stamina_label)
 	stamina_bar = ProgressBar.new()
 	stamina_bar.max_value = STAMINA_MAX
 	stamina_bar.custom_minimum_size = Vector2(160, 18)
 	stamina_bar.show_percentage = false
+	stamina_bar.add_theme_stylebox_override("background", _flat(Color("#1b2a3a"), Color("#31495c"), 3))
+	var st_fill := StyleBoxFlat.new()
+	st_fill.bg_color = Color("#38bdf8")
+	st_fill.set_corner_radius_all(3)
+	stamina_bar.add_theme_stylebox_override("fill", st_fill)
 	status.add_child(stamina_bar)
 
 	# 棋盘 3D 视口（固定在顶部带状区域，手牌在其下方，互不遮挡）
@@ -1314,7 +1359,7 @@ func _build_ui() -> void:
 	hand_bar = hand_row
 	for i in range(HAND_SIZE):
 		var button := Button.new()
-		button.custom_minimum_size = Vector2(236, 92)
+		button.custom_minimum_size = Vector2(236, 104)
 		button.add_theme_font_size_override("font_size", 14)
 		button.set_meta("hand_index", i)
 		hand_buttons.append(button)
@@ -1333,16 +1378,18 @@ func _build_ui() -> void:
 	main.add_child(bottom)
 	auto_button = Button.new()
 	auto_button.text = "自动布阵"
-	auto_button.custom_minimum_size = Vector2(110, 38)
-	auto_button.add_theme_stylebox_override("normal", _flat(Color("#1c2c40"), Color("#31495c"), 8))
-	auto_button.add_theme_stylebox_override("hover", _flat(Color("#243850"), Color("#3f5d78"), 8))
+	auto_button.custom_minimum_size = Vector2(150, 46)
+	auto_button.add_theme_font_size_override("font_size", 16)
+	auto_button.add_theme_stylebox_override("normal", _flat(Color("#2a3646"), Color("#46586c"), 12))
+	auto_button.add_theme_stylebox_override("hover", _flat(Color("#35455a"), Color("#5d7488"), 12))
 	auto_button.pressed.connect(func(): auto_deploy())
 	bottom.add_child(auto_button)
 	start_button = Button.new()
 	start_button.text = "开战 / 重开"
-	start_button.custom_minimum_size = Vector2(130, 38)
-	start_button.add_theme_stylebox_override("normal", _flat(Color("#173a36"), Color("#34d399"), 8))
-	start_button.add_theme_stylebox_override("hover", _flat(Color("#1e4a43"), Color("#6ee7b7"), 8))
+	start_button.custom_minimum_size = Vector2(170, 46)
+	start_button.add_theme_font_size_override("font_size", 16)
+	start_button.add_theme_stylebox_override("normal", _flat(Color("#173a36"), Color("#34d399"), 12))
+	start_button.add_theme_stylebox_override("hover", _flat(Color("#1e4a43"), Color("#6ee7b7"), 12))
 	start_button.pressed.connect(_on_start)
 	bottom.add_child(start_button)
 	feedback_label = Label.new()
@@ -1439,10 +1486,12 @@ func _refresh() -> void:
 		var cost := card_cost(card_id, "player")
 		var afford := player_stamina >= cost
 		var type_color: Color = TYPE_COLORS[String(def["type"])]
-		var main_line := "出手 %d 次" % card_actions(card_id, "player") if int(def.get("actions", 0)) > 0 else "持续 %.0fs" % float(def.get("duration", 0.0))
-		button.text = "%s\n%d 体力 · %s\n%s\n%s" % [
+		var max_actions := card_actions(card_id, "player")
+		var action_line := "出手 %d 次" % max_actions if max_actions > 0 else "持续 %.0fs" % float(def.get("duration", 0.0))
+		var pips_line := "%d/%d" % [max_actions, max_actions] if max_actions > 0 else "—"
+		button.text = "%s\n%d费 · %s\n%s\n%s" % [
 			String(def["name"]), cost, ZONE_NAMES[String(def["zone"][0])],
-			main_line, "可出牌" if afford else "体力不足"
+			action_line, pips_line
 		]
 		button.disabled = false
 		var bg := Color("#1c2c40") if afford else Color("#131d2b")
