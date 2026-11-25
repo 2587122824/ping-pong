@@ -885,6 +885,8 @@ func _build_world() -> void:
 	board_viewport = SubViewport.new()
 	board_viewport.size = Vector2i(1240, 330)
 	board_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	# 独立 3D 世界：否则棋子/炸弹挂在共享主世界里，主相机也会把它们再渲染一遍，界面下方漏出第二套阵型
+	board_viewport.own_world_3d = true
 	var world := board_viewport
 
 	# 独立环境光 + 平行光（布阵场景可能脱离主世界单独打开）
@@ -1085,7 +1087,11 @@ func _pick_slot(screen_pos: Vector2) -> Dictionary:
 	var local := _to_viewport_local(screen_pos)
 	var ray_origin: Vector3 = battle_camera.project_ray_origin(local)
 	var ray_dir: Vector3 = battle_camera.project_ray_normal(local)
-	var space := get_world_3d().direct_space_state
+	# 相机挂在独立 SubViewport 内，用它所属的 3D 世界做射线；回退到根世界兜底
+	var view_world: World3D = battle_camera.get_world_3d() if battle_camera != null else get_world_3d()
+	if view_world == null:
+		view_world = get_world_3d()
+	var space := view_world.direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + ray_dir * 30.0)
 	query.collide_with_areas = true
 	var hit := space.intersect_ray(query)
