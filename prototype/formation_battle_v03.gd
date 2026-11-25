@@ -24,6 +24,10 @@ const BASELINE_DAMAGE := 22
 const PLAYER_MAX_HP := 100
 const BATTLE_LIMIT := 90.0
 const ENEMY_DEPLOY_INTERVAL := 2.4
+# 主动换阵覆盖：返还被替换单位费用的比例
+const SWAP_REFUND := 0.25
+# 炸弹冲击波：震掉受击方前排（近台）单位的出手次数
+const SHOCKWAVE_DRAIN := 1
 
 const ZONE_ROWS := {"near": [0, 1], "mid": [2, 3, 4], "far": [5, 6]}
 const ZONE_NAMES := {"near": "近台", "mid": "中台", "far": "远台"}
@@ -364,6 +368,11 @@ func _spawn(card_id: String, side: String, lane: int, row: int, pay := true) -> 
 	if old != null:
 		old.alive = false
 		exits[side] = int(exits[side]) + 1
+		# 主动换阵覆盖：玩家替换旧单位时返还部分体力（设计 §4.2 第 4 种退场）
+		if side == "player":
+			var refund := int(card_cost(String(old.card), "player") * SWAP_REFUND)
+			player_stamina = mini(STAMINA_MAX, player_stamina + refund)
+			_log("换阵覆盖：%s 退场，返还 %d 点体力" % [String(old.name), refund])
 	board[side][lane][row] = unit
 	deployed[side] = int(deployed[side]) + 1
 	var entry_push := float(CARDS[card_id].get("entry_push", 0.0))
@@ -618,10 +627,23 @@ func _control_tick(unit, delta: float) -> void:
 func _target_for(unit):
 	var enemy_side := "enemy" if unit.side == "player" else "player"
 	var lane := int(unit.lane)
-	# 本路近台 → 远台依次找活着的目标
-	var order: Array = [0, 1, 2, 3, 4, 5, 6]
-	for row in order:
-		var other = board[enemy_side][lane][row]
+	# 本路优先
+	var target = _lane_target(enemy_side, lane)
+	if target != null:
+		return target
+	# 本路敌方全空：多余攻势向相邻路偏移支援（设计 §2.2）
+	for alt in [lane - 1, lane + 1]:
+		if alt >= 0 and alt < LANES:
+			target = _lane_target(enemy_side, alt)
+			if target != null:
+				return target
+	return null
+
+
+func _lane_target(side: String, lane: int):
+	# 近台 → 远台依次找活着的目标
+	for row in range(ROWS):
+		var other = board[side][lane][row]
 		if other != null and other.alive:
 			return other
 	return null
@@ -773,23 +795,46 @@ func _check_bomb() -> void:
 
 
 func _detonate(reason: String) -> void:
+	var hit_side := ""
 	if reason == "timer":
 		if bomb_pos > 0.3:
 			_damage_side("enemy", BOMB_DAMAGE, "炸弹定时引爆")
+			hit_side = "enemy"
 		elif bomb_pos < -0.3:
 			_damage_side("player", BOMB_DAMAGE, "炸弹定时引爆")
+			hit_side = "player"
 		else:
 			_log("炸弹在中线震荡，无人受伤")
 	elif reason == "baseline_enemy":
 		_damage_side("enemy", BASELINE_DAMAGE, "炸弹被推到底线")
+		hit_side = "enemy"
 	elif reason == "baseline_player":
 		_damage_side("player", BASELINE_DAMAGE, "炸弹被推到底线")
+		hit_side = "player"
+	# 局部冲击波：震掉受击方前排近台单位的部分出手（设计 §3.2）
+	_shockwave(hit_side)
 	play_explosion()
 	bomb_pos = 0.0
 	bomb_cooldown = BOMB_RESPAWN
 	if bomb_node != null:
 		bomb_node.visible = false
 	_log("炸弹引爆，%.0f 秒后放下一颗新球" % BOMB_RESPAWN)
+
+
+func _shockwave(side: String) -> void:
+	if side == "":
+		return
+	for lane in range(LANES):
+		for row in ZONE_ROWS["near"]:
+			var u = board[side][lane][row]
+			if u == null or not u.alive:
+				continue
+			if u.type == "control":
+				continue
+			u.actions = int(u.actions) - SHOCKWAVE_DRAIN
+			_log("冲击波：%s 前排 %s 受震，掉 %d 次出手" % ["我方" if side == "player" else "敌方", String(u.name), SHOCKWAVE_DRAIN])
+			if int(u.actions) <= 0:
+				_exit(u, "冲击波震退场")
 
 
 func play_explosion() -> void:
@@ -968,6 +1013,19 @@ func _build_world() -> void:
 	center_line.material_override = net_mat
 	center_line.position = Vector3(0.0, 0.02, 0.0)
 	world.add_child(center_line)
+
+	# 车道分隔凹槽（上/中/下三路边界）
+	for groove_z in [-0.6, 0.6]:
+		var groove := MeshInstance3D.new()
+		var groove_box := BoxMesh.new()
+		groove_box.size = Vector3(14.6, 0.02, 0.06)
+		groove.mesh = groove_box
+		var groove_mat := StandardMaterial3D.new()
+		groove_mat.albedo_color = Color("#6b4a28")
+		groove_mat.roughness = 0.85
+		groove.material_override = groove_mat
+		groove.position = Vector3(0.0, 0.02, groove_z)
+		world.add_child(groove)
 
 	# 槽位面板 + 点选 Area3D
 	for side in ["player", "enemy"]:

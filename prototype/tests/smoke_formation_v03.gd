@@ -150,6 +150,41 @@ func _run() -> void:
 	battle._press(heavy, elder_unit)
 	assert(battle.bomb_pos < 1.5, "elder soft hands cut the spin push: %.2f" % battle.bomb_pos)
 
+	# 跨路支援：本路敌方全空时，多余攻势向相邻路偏移
+	battle.restart()
+	battle.level_id = "CH0-B01"
+	_clear(battle)
+	battle._spawn("tt_loop", "player", 1, 2, false)
+	var p_unit = battle.board["player"][1][2]
+	battle._spawn("tt_main", "enemy", 0, 0, false)
+	var e_unit = battle.board["enemy"][0][0]
+	var t = battle._target_for(p_unit)
+	assert(t == e_unit, "pressure shifts to an adjacent lane when own lane is empty")
+
+	# 主动换阵覆盖：替换旧单位并返还部分体力
+	battle.restart()
+	battle.level_id = "CH0-B01"
+	_clear(battle)
+	battle._spawn("tt_sub", "player", 0, 0, true)
+	var after_first: int = battle.player_stamina
+	battle._spawn("tt_loop", "player", 0, 0, true)
+	var refund: int = int(battle.card_cost("tt_sub", "player") * battle.SWAP_REFUND)
+	assert(battle.player_stamina == after_first - battle.card_cost("tt_loop", "player") + refund, "swap covers old unit and refunds stamina: %d" % battle.player_stamina)
+
+	# 炸弹冲击波：震掉受击方前排近台单位一次出手
+	battle.restart()
+	battle.level_id = "CH0-B01"
+	_clear(battle)
+	battle._spawn("tt_main", "enemy", 1, 0, false)
+	var sw_unit = battle.board["enemy"][1][0]
+	var before_actions: int = int(sw_unit.actions)
+	battle.start_battle()
+	sw_unit.cooldown = 99.0
+	battle.bomb_pos = 3.0
+	battle.bomb_timer = 0.05
+	battle.tick(0.1)
+	assert(int(sw_unit.actions) == before_actions - 1, "shockwave drains one near-row action: %d" % sw_unit.actions)
+
 	# 生命归零结算
 	battle.level_id = "CH0-B01"
 	battle.restart()
