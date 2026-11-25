@@ -145,11 +145,13 @@ var battle_time := 0.0
 var end_reason := ""
 
 var board := {}
-# 全场共用一颗主炸弹：pos 负=我方半场，正=敌方半场；timer 定时；lane 为视觉所在路
+# 全场共用一颗主炸弹：pos 负=我方半场，正=敌方半场；timer 定时；lane 固定在中路
 var bomb_pos := 0.0
 var bomb_timer := BOMB_TIMER
 var bomb_lane := 1
 var boom_time := 0.0
+# 炸弹视觉位置（缓动用，避免每次推力直接瞬移）
+var bomb_vis_x := 0.0
 
 var hand: Array = []
 var draw_pile: Array = []
@@ -256,6 +258,7 @@ func restart() -> void:
 	bomb_timer = BOMB_TIMER
 	bomb_lane = 1
 	boom_time = 0.0
+	bomb_vis_x = 0.0
 	hand = []
 	draw_pile = []
 	discard = []
@@ -359,7 +362,7 @@ func _spawn(card_id: String, side: String, lane: int, row: int, pay := true) -> 
 	board[side][lane][row] = unit
 	deployed[side] = int(deployed[side]) + 1
 	var entry_push := float(CARDS[card_id].get("entry_push", 0.0))
-	if entry_push > 0.0:
+	if entry_push > 0.0 and phase == "battle":
 		_push(side, lane, entry_push, unit)
 	_log("%s %s → %s·%s" % ["我方" if side == "player" else "敌方", unit.name, ["上", "中", "下"][lane], ZONE_NAMES[zone_of_row(row)]])
 	return true
@@ -519,6 +522,14 @@ func _process(delta: float) -> void:
 	if auto_tick:
 		tick(delta)
 	_tick_boom(delta)
+	_update_bomb_visual(delta)
+
+
+func _update_bomb_visual(delta: float) -> void:
+	var target_x := bomb_pos / BOMB_RANGE * 7.15
+	bomb_vis_x = move_toward(bomb_vis_x, target_x, delta * 10.0)
+	if bomb_node != null:
+		bomb_node.position = Vector3(bomb_vis_x, 0.42, LANE_Z[bomb_lane])
 
 
 func _step(delta: float) -> void:
@@ -627,7 +638,6 @@ func _push(side: String, lane: int, amount: float, unit = null) -> void:
 	if lane < 0 or lane >= LANES or amount == 0.0:
 		return
 	var sign_dir := 1.0 if side == "player" else -1.0
-	bomb_lane = lane
 	bomb_pos = bomb_pos + amount * sign_dir
 	_check_bomb()
 
@@ -1198,8 +1208,8 @@ func _sync_board_visuals() -> void:
 				else:
 					mat.albedo_color = _zone_color(zone_of_row(row))
 
-	# 炸弹位置：沿 X 轴压到对应半场格子，Z 跟随最后一路
-	var bomb_x := bomb_pos / BOMB_RANGE * 7.15
+	# 炸弹位置：沿 X 轴压到对应半场格子，固定中路
+	var bomb_x := bomb_vis_x
 	if bomb_node != null:
 		bomb_node.position = Vector3(bomb_x, 0.42, LANE_Z[bomb_lane])
 		if bomb_material != null:
