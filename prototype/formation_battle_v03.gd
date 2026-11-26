@@ -244,11 +244,29 @@ var drag_card := -1
 var drag_active := false
 var drag_start := Vector2.ZERO
 
+# 新手教学引导
+var show_tutorial_on_ready := true
+var tutorial_layer: CanvasLayer
+var tutorial_dim: ColorRect
+var tutorial_hl: Panel
+var tutorial_panel: PanelContainer
+var tutorial_title: Label
+var tutorial_body: Label
+var tutorial_step_label: Label
+var tutorial_prev: Button
+var tutorial_next: Button
+var tutorial_skip: Button
+var tutorial_step := 0
+var tutorial_open := false
+var tutorial_steps: Array = []
+
 
 func _ready() -> void:
 	if ui_enabled:
 		_build_world()
 		_build_ui()
+	if show_tutorial_on_ready:
+		open_tutorial()
 	restart()
 
 
@@ -1943,6 +1961,13 @@ func _build_ui() -> void:
 	level_label.add_theme_font_size_override("font_size", 15)
 	level_label.add_theme_color_override("font_color", Color("#d9f1ff"))
 	top.add_child(level_label)
+	var help_button := Button.new()
+	help_button.text = "教学"
+	help_button.custom_minimum_size = Vector2(80, 34)
+	help_button.add_theme_stylebox_override("normal", _flat(Color("#1c2c40"), Color("#31495c"), 8))
+	help_button.add_theme_stylebox_override("hover", _flat(Color("#243850"), Color("#3f5d78"), 8))
+	help_button.pressed.connect(open_tutorial)
+	top.add_child(help_button)
 	var top_spacer := Control.new()
 	top_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(top_spacer)
@@ -2085,6 +2110,160 @@ func _build_ui() -> void:
 	log_label.add_theme_font_size_override("font_size", 13)
 	log_label.add_theme_color_override("font_color", Color("#a9bfd1"))
 	main.add_child(log_label)
+
+	_build_tutorial()
+
+
+# ---------------- 新手教学引导 ----------------
+
+func _build_tutorial() -> void:
+	tutorial_steps = [
+		{"title": "① 胜利目标", "anchor": "hp", "body": "顶部绿条是你的生命，红条是 BOSS 生命，把对手血量打空就获胜；90 秒时间到则按剩余血量判定胜负。"},
+		{"title": "② 布置手牌", "anchor": "hand", "body": "下方是你的招式手牌。点一张牌选中，再点我方半场空位放下；也可以直接把牌拖到棋盘上。牌面标注了费用、出手次数 / 持续时间和可站区域。"},
+		{"title": "③ 三路七排", "anchor": "board", "body": "棋盘分左中右 3 条路，每条路 7 排：近台（前排）、中台、远台（后排）。招式只能落在它标注的区域内。"},
+		{"title": "④ 体力与连携", "anchor": "stamina", "body": "放牌消耗体力（蓝条），体力每秒缓慢回复，费用不够的牌会变灰。同一路摆上配合招式可触发连携，光弧会把它们连起来。"},
+		{"title": "⑤ 克制关系", "anchor": "hand", "body": "四类招式互相克制：快攻克控台、弧圈克快攻、控台克弧圈、反拉可借力反推弧圈与快攻。明显克制命中会削掉对手出手次数。"},
+		{"title": "⑥ 全场主炸弹", "anchor": "bomb", "body": "双方招式共同推动这颗炸弹往对方半场走；推到底线或倒计时归零就引爆，冲击波会震掉受击方前排单位并扣血。"},
+		{"title": "⑦ 开战", "anchor": "start", "body": "阵型摆好后点「开战 / 重开」，双方自动对打；「自动布阵」可先让系统铺牌。顶部还能切换不同 BOSS 再战一局。"},
+	]
+
+	tutorial_layer = CanvasLayer.new()
+	tutorial_layer.layer = 20
+	add_child(tutorial_layer)
+
+	tutorial_dim = ColorRect.new()
+	tutorial_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	tutorial_dim.color = Color(0.05, 0.09, 0.14, 0.35)
+	tutorial_dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_layer.add_child(tutorial_dim)
+
+	tutorial_hl = Panel.new()
+	tutorial_hl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	tutorial_hl.add_theme_stylebox_override("panel", _flat(Color(0, 0, 0, 0), Color("#22d3ee"), 10))
+	tutorial_layer.add_child(tutorial_hl)
+
+	tutorial_panel = PanelContainer.new()
+	tutorial_panel.set_anchors_preset(Control.PRESET_CENTER)
+	tutorial_panel.custom_minimum_size = Vector2(620, 196)
+	tutorial_panel.offset_left = -310
+	tutorial_panel.offset_top = -98
+	tutorial_panel.offset_right = 310
+	tutorial_panel.offset_bottom = 98
+	tutorial_panel.add_theme_stylebox_override("panel", _flat(Color("#142233f2"), Color("#38bdf8"), 14))
+	tutorial_layer.add_child(tutorial_panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	tutorial_panel.add_child(vbox)
+
+	tutorial_title = Label.new()
+	tutorial_title.add_theme_font_size_override("font_size", 18)
+	tutorial_title.add_theme_color_override("font_color", Color("#e0f2fe"))
+	vbox.add_child(tutorial_title)
+
+	tutorial_body = Label.new()
+	tutorial_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tutorial_body.custom_minimum_size = Vector2(560, 72)
+	tutorial_body.add_theme_font_size_override("font_size", 14)
+	tutorial_body.add_theme_color_override("font_color", Color("#c9d8e6"))
+	vbox.add_child(tutorial_body)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	vbox.add_child(row)
+	tutorial_step_label = Label.new()
+	tutorial_step_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tutorial_step_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	tutorial_step_label.add_theme_color_override("font_color", Color("#7dd3fc"))
+	row.add_child(tutorial_step_label)
+
+	tutorial_skip = Button.new()
+	tutorial_skip.text = "跳过教学"
+	tutorial_skip.pressed.connect(close_tutorial)
+	row.add_child(tutorial_skip)
+	tutorial_prev = Button.new()
+	tutorial_prev.text = "上一步"
+	tutorial_prev.pressed.connect(_tutorial_prev)
+	row.add_child(tutorial_prev)
+	tutorial_next = Button.new()
+	tutorial_next.text = "下一步"
+	tutorial_next.pressed.connect(_tutorial_next)
+	row.add_child(tutorial_next)
+
+	tutorial_panel.visible = false
+	tutorial_dim.visible = false
+	tutorial_hl.visible = false
+
+
+func _tutorial_anchor_node(key: String) -> Control:
+	match key:
+		"hp":
+			return player_hp_bar
+		"hand":
+			return hand_bar
+		"board":
+			return board_container
+		"stamina":
+			return stamina_bar
+		"bomb":
+			return bomb_hud_label
+		"start":
+			return start_button
+		"auto":
+			return auto_button
+	return null
+
+
+func open_tutorial() -> void:
+	if tutorial_panel == null:
+		return
+	tutorial_open = true
+	tutorial_step = 0
+	tutorial_panel.visible = true
+	tutorial_dim.visible = true
+	tutorial_hl.visible = true
+	_show_tutorial_step()
+
+
+func close_tutorial() -> void:
+	tutorial_open = false
+	if tutorial_panel == null:
+		return
+	tutorial_panel.visible = false
+	tutorial_dim.visible = false
+	tutorial_hl.visible = false
+
+
+func _tutorial_next() -> void:
+	if tutorial_step < tutorial_steps.size() - 1:
+		tutorial_step += 1
+		_show_tutorial_step()
+	else:
+		close_tutorial()
+
+
+func _tutorial_prev() -> void:
+	if tutorial_step > 0:
+		tutorial_step -= 1
+		_show_tutorial_step()
+
+
+func _show_tutorial_step() -> void:
+	var step: Dictionary = tutorial_steps[tutorial_step]
+	tutorial_title.text = String(step["title"])
+	tutorial_body.text = String(step["body"])
+	tutorial_step_label.text = "%d / %d" % [tutorial_step + 1, tutorial_steps.size()]
+	tutorial_prev.disabled = tutorial_step == 0
+	tutorial_next.text = "完成" if tutorial_step == tutorial_steps.size() - 1 else "下一步"
+	var node := _tutorial_anchor_node(String(step.get("anchor", "")))
+	if node != null:
+		tutorial_hl.visible = true
+		await get_tree().process_frame
+		var rect := node.get_global_rect()
+		tutorial_hl.position = rect.position - Vector2(8, 8)
+		tutorial_hl.size = rect.size + Vector2(16, 16)
+	else:
+		tutorial_hl.visible = false
 
 
 func _flat(bg: Color, border: Color, radius := 6) -> StyleBoxFlat:

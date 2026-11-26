@@ -50,13 +50,13 @@
 
 ## 运行状态
 
-本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描；回归脚本见 `prototype/tests/`：牌战线 `smoke_battle / smoke_collection / smoke_equipment / smoke_gate / smoke_inventory / smoke_skills / smoke_trade`；布阵 V0.3 线 `smoke_formation_v03`（去血单位/炸弹推拉/克制压制/BOSS 能力/生命结算）、`balance_v03`（两 BOSS 平衡基线）、`debug_v03`（单局轨迹）、`smoke_hud`（布阵原型打开/关闭时探索常驻 HUD 收起与恢复）、`smoke_highlight`（选牌后可放置槽位三态高亮与取消选中）、`probe_input_v03`（手牌 meta 回溯 + 槽位射线往返）、`probe_deploy_slot`（部署入口落盘断言）、`probe_gameplay_v03`（在场密度/断档/体力水位时序采样）、`probe_rules_v03`（控台扣时长/三种连携/跨路跟随/三阶段定时专项）、`probe_ui_build_v03`（完整 UI 构建：光弧导轨/尾焰/音效节点链路）。旧 V0.2 布阵冒烟与探针已随原型删除；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
+本机 Godot 安装位置：`%LOCALAPPDATA%\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe`。工程通过 headless editor 扫描；回归脚本见 `prototype/tests/`：牌战线 `smoke_battle / smoke_collection / smoke_equipment / smoke_gate / smoke_inventory / smoke_skills / smoke_trade`；布阵 V0.3 线 `smoke_formation_v03`（去血单位/炸弹推拉/克制压制/BOSS 能力/生命结算）、`balance_v03`（两 BOSS 平衡基线）、`debug_v03`（单局轨迹）、`smoke_hud`（布阵原型打开/关闭时探索常驻 HUD 收起与恢复）、`smoke_highlight`（选牌后可放置槽位三态高亮与取消选中）、`probe_input_v03`（手牌 meta 回溯 + 槽位射线往返）、`probe_deploy_slot`（部署入口落盘断言）、`probe_gameplay_v03`（在场密度/断档/体力水位时序采样）、`probe_rules_v03`（控台扣时长/三种连携/跨路跟随/三阶段定时专项）、`probe_ui_build_v03`（完整 UI 构建：光弧导轨/尾焰/音效节点链路）、`probe_tutorial_v03`（教学引导翻页/高亮/关闭链路）。旧 V0.2 布阵冒烟与探针已随原型删除；交互式画面与输入仍需人工试玩。项目没有后台服务，功能变更后需重启 Godot 原型运行实例。
 
 ## 下一步
 
 **布阵 V0.3（候选主线）**：先真人试玩 `formation_battle_v03.tscn`，确认三件事：一是单颗共享炸弹的视觉焦点与倒计时压迫感是否清晰；二是开局 100 体力铺 4–5 张、前 20 秒互克/引爆节奏是否成立；三是小孩哥快攻 swarm 与大爷卸力反制的破解意图是否读得出来。当前代理基线场上密度仍偏低（我方约 10–13%、敌方约 4% 在场），属经济数值，**真人对局前不动 BOSS 生命/补位/回复旋钮**，不要按探针数字压 BOSS。
 
-已实现：跨路空路支援与 debuff 跟随、换阵返还 25% 体力、换阵变招抢攻、炸弹冲击波削前排出手、克制压制削次/控台扣时长、炸弹倒计时（头顶秒数 + HUD 读数 + 临爆变色脉冲）、三种同路连携、落子回弹与触发跳字、主导路提亮、炸弹尾焰 puff、连携彩色光弧导轨、程序合成事件音效（落子/击球/反推/连携/爆炸/读秒滴答/胜利琶角）。
+已实现：跨路空路支援与 debuff 跟随、换阵返还 25% 体力、换阵变招抢攻、炸弹冲击波削前排出手、克制压制削次/控台扣时长、炸弹倒计时（头顶秒数 + HUD 读数 + 临爆变色脉冲）、三种同路连携、落子回弹与触发跳字、主导路提亮、炸弹尾焰 puff、连携彩色光弧导轨、程序合成事件音效（落子/击球/反推/连携/爆炸/读秒滴答/胜利琶角）；内置 7 步新手教学引导，首次进入自动弹出、顶部「教学」按钮可重开，分步高亮血条/手牌/棋盘/体力/炸弹/开战按钮。
 
 待排期遗留：① 连携光弧暂为实心导轨（本构建未注册 Line3D，虚线材质待后续切换）；音效为合成占位，可替换正式采样；② 在场密度低于 30%–50% 目标，待真人对局统计后再做经济校准；③ 单位/手牌正式 sprite 或 GLB 与 BOSS 徽章、光束体积感待打磨。旧 V0.2 HP 单位体系及其探针/测试已删除。
 

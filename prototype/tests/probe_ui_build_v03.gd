@@ -10,6 +10,7 @@ func _initialize() -> void:
 func _run() -> void:
 	var scene = load("res://formation_battle_v03.tscn")
 	var battle: Variant = scene.instantiate()
+	battle.show_tutorial_on_ready = false
 	root.add_child(battle)
 	await process_frame
 	await process_frame
