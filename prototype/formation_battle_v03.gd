@@ -1070,6 +1070,7 @@ func _damage_side(side: String, amount: int, source: String) -> void:
 			phase = "won"
 			end_reason = "敌方生命归零"
 			set_feedback("挑战成功：对手生命归零", true)
+			_play_sfx("win")
 
 
 func _end_by_time() -> void:
@@ -1077,6 +1078,8 @@ func _end_by_time() -> void:
 	end_reason = "90 秒到，按剩余生命判定"
 	_log("90 秒到：我方 %d / 敌方 %d" % [maxi(0, player_hp), maxi(0, enemy_hp)])
 	set_feedback("时间到：%s" % ("我方血量更高" if phase == "won" else "敌方血量更高"), phase == "won")
+	if phase == "won":
+		_play_sfx("win")
 
 
 func _enemy_deploy() -> void:
@@ -1213,6 +1216,7 @@ func _sfx_stream(kind: String) -> AudioStreamWAV:
 		"combo": samples = _sfx_combo()
 		"explode": samples = _sfx_boom(0.35)
 		"tick": samples = _sfx_tone(1250.0, 0.04, 0.16, "square")
+		"win": samples = _sfx_win()
 	var bytes := PackedByteArray()
 	for s in samples:
 		var v := clampi(int(round(float(s) * 32767.0)), -32768, 32767)
@@ -1258,6 +1262,15 @@ func _sfx_hit(dur: float) -> Array:
 
 func _sfx_combo() -> Array:
 	return _sfx_tone(523.0, 0.07, 0.22, "sine") + _sfx_tone(784.0, 0.1, 0.22, "sine")
+
+
+func _sfx_win() -> Array:
+	# 胜利上行琶角：C5 -> E5 -> G5 -> C6 收尾长音
+	var out: Array = _sfx_tone(523.25, 0.12, 0.22, "sine")
+	out += _sfx_tone(659.25, 0.12, 0.22, "sine")
+	out += _sfx_tone(783.99, 0.12, 0.22, "sine")
+	out += _sfx_tone(1046.5, 0.32, 0.24, "sine")
+	return out
 
 
 func _sfx_boom(dur: float) -> Array:

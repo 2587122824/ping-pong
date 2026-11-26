@@ -38,6 +38,14 @@ func _run() -> void:
 
 	assert(battle.trail_puffs.size() > 0, "trail puffs spawned: %d" % battle.trail_puffs.size())
 	assert(battle.sfx_players.size() > 0, "sfx players created: %d" % battle.sfx_players.size())
+
+	# 击溃敌方 -> 胜利音效入列
+	battle._damage_side("enemy", 999, "probe")
+	await process_frame
+	assert(battle.phase == "won", "battle won")
+	assert(battle.sfx_players.has("win"), "win sfx created")
+	assert(battle.sfx_cache.has("win"), "win stream cached")
+
 	print("ui build probe ok: rails=%d puffs=%d sfx=%d" % [battle.combo_lines.size(), battle.trail_puffs.size(), battle.sfx_players.size()])
 	battle.queue_free()
 	quit()
